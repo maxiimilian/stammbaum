@@ -171,6 +171,11 @@ function applyMode(id: string): void {
   if (mode.id === 'system') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = mode.id;
 
+  // daisyUI sets color-scheme from inside a cascade layer, which any unlayered
+  // rule on a host page would win against. Setting it inline keeps scrollbars
+  // and form controls in step wherever the page is embedded.
+  document.documentElement.style.colorScheme = mode.id === 'system' ? 'light dark' : mode.id;
+
   themeButton.replaceChildren(icon(mode.icon));
   themeButton.title = `Darstellung: ${mode.label} — umschalten auf ${next.label}`;
   themeButton.setAttribute('aria-label', themeButton.title);
