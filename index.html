@@ -1,18 +1,17 @@
 <!doctype html>
-<html lang="de" data-theme="sims">
+<html lang="de" data-theme="material">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Stammbaum — wer ist noch mal wer?" />
+    <meta name="theme-color" content="#6750a4" />
     <title>Stammbaum</title>
   </head>
   <body>
     <div id="app">
-      <header class="topbar">
-        <a class="crest" href="#/" title="Zur Übersicht">
-          <span class="crest-mark" aria-hidden="true"></span>
-          <span class="crest-title" id="family-title">Stammbaum</span>
-        </a>
+      <header class="app-bar">
+        <a class="app-title" href="#/" id="family-title">Stammbaum</a>
+        <div class="app-actions"></div>
 
         <div class="search" role="search">
           <input
@@ -20,17 +19,12 @@
             type="search"
             autocomplete="off"
             spellcheck="false"
-            placeholder="Wer ist das? …"
+            placeholder="Wer ist das?"
             aria-label="Person suchen"
             aria-expanded="false"
           />
           <ul id="results" class="results" role="listbox" hidden></ul>
         </div>
-
-        <nav class="tools">
-          <button id="back" type="button" class="chip chip-wide" hidden>← Übersicht</button>
-          <button id="theme" type="button" class="chip chip-wide" title="Design wechseln">🔮 Sims</button>
-        </nav>
       </header>
 
       <main id="view" class="view"></main>

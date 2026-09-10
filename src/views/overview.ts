@@ -1,16 +1,28 @@
 import type { Family } from '../family';
-import { layoutFamily, METRICS, type Layout, type NodeBox } from '../layout/layout';
+import { layoutFamily, METRICS, type Layout, type NodeBox, type UnionEdge } from '../layout/layout';
 import { photoUrl } from '../data';
-import { familyName, initials, lifespan, shortName, avatarHue } from '../ui/format';
+import { familyName, initials, lifespan, shortName, avatarHue, year } from '../ui/format';
+import { icon } from '../ui/icons';
 import type { Person } from '../parser/types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const MIN_SCALE = 0.15;
+const MIN_SCALE = 0.12;
 const MAX_SCALE = 2.5;
+/** Below this the labels stop being readable, so a phone starts here instead of fitting. */
+const READABLE_SCALE = 0.5;
+const DOUBLE_TAP_MS = 320;
+const TAP_SLOP = 10;
+
+interface View {
+  k: number;
+  x: number;
+  y: number;
+}
 
 /**
- * The whole tree in one pannable, zoomable SVG. Built once and kept alive, so
- * you come back from a person view to exactly the spot you left.
+ * The whole tree in one SVG, driven entirely by gestures: drag to pan, pinch to
+ * zoom, double-tap to zoom in, flick for momentum. Built once and kept alive,
+ * so returning from a person view lands on exactly the spot you left.
  */
 export class OverviewView {
   readonly element: HTMLElement;
@@ -18,9 +30,11 @@ export class OverviewView {
   private readonly viewport: SVGGElement;
   private readonly layout: Layout;
   private readonly nodeElements = new Map<string, SVGGElement>();
-  private scale = 1;
-  private translate = { x: 0, y: 0 };
+  private view: View = { k: 1, x: 0, y: 0 };
+  private positioned = false;
   private highlighted: string | undefined;
+  private animation = 0;
+  private momentum = 0;
 
   constructor(
     private readonly family: Family,
@@ -37,74 +51,327 @@ export class OverviewView {
     this.element.append(this.svg);
 
     this.viewport.append(this.drawLinks(), this.drawNodes());
-    this.bindPointer();
-    this.element.append(this.buildControls());
+    this.bindGestures();
+    this.element.append(this.buildFab());
   }
 
   /** Called whenever the view becomes visible. */
   activate(): void {
-    if (this.scale === 1 && this.translate.x === 0 && this.translate.y === 0) this.fit();
-    else this.apply();
+    if (this.positioned) this.apply();
+    else this.frame();
   }
 
-  fit(): void {
+  /** The opening view: readable rather than complete, which matters on a phone. */
+  frame(): void {
     const box = this.svg.getBoundingClientRect();
     if (box.width === 0) return;
-    const scale = clamp(
+    const k = clamp(
       Math.min(box.width / this.layout.width, box.height / this.layout.height),
+      READABLE_SCALE,
+      1,
+    );
+    this.set({
+      k,
+      x: (box.width - this.layout.width * k) / 2,
+      y: Math.min((box.height - this.layout.height * k) / 2, 24),
+    });
+    this.positioned = true;
+  }
+
+  /** Zooms out until the whole tree is on screen. */
+  fit(animate = true): void {
+    const box = this.svg.getBoundingClientRect();
+    if (box.width === 0) return;
+    const k = clamp(
+      Math.min(box.width / (this.layout.width + 40), box.height / (this.layout.height + 40)),
       MIN_SCALE,
       1.1,
     );
-    this.scale = scale;
-    this.translate = {
-      x: (box.width - this.layout.width * scale) / 2,
-      y: (box.height - this.layout.height * scale) / 2,
+    const target = {
+      k,
+      x: (box.width - this.layout.width * k) / 2,
+      y: (box.height - this.layout.height * k) / 2,
     };
-    this.apply();
+    this.positioned = true;
+    if (animate) this.animateTo(target);
+    else this.set(target);
   }
 
-  /** Centres one bubble and gives it the plumbob, used by search. */
+  /** Centres one bubble and marks it, used by search. */
   highlight(id: string): void {
     const node = this.layout.nodes.get(id);
     if (!node) return;
     const box = this.svg.getBoundingClientRect();
-    this.scale = clamp(Math.max(this.scale, 0.9), MIN_SCALE, MAX_SCALE);
-    this.translate = {
-      x: box.width / 2 - node.x * this.scale,
-      y: box.height / 2 - node.y * this.scale,
-    };
-    this.apply();
+    const k = clamp(Math.max(this.view.k, 0.9), MIN_SCALE, MAX_SCALE);
+    this.positioned = true;
+    this.animateTo({ k, x: box.width / 2 - node.x * k, y: box.height / 2 - node.y * k });
+
     if (this.highlighted) this.nodeElements.get(this.highlighted)?.classList.remove('is-focused');
     this.nodeElements.get(id)?.classList.add('is-focused');
     this.highlighted = id;
   }
 
-  private zoomBy(factor: number, originX?: number, originY?: number): void {
-    const box = this.svg.getBoundingClientRect();
-    const cx = originX ?? box.width / 2;
-    const cy = originY ?? box.height / 2;
-    const next = clamp(this.scale * factor, MIN_SCALE, MAX_SCALE);
-    const ratio = next / this.scale;
-    this.translate = {
-      x: cx - (cx - this.translate.x) * ratio,
-      y: cy - (cy - this.translate.y) * ratio,
-    };
-    this.scale = next;
-    this.apply();
+  // ---- viewport -----------------------------------------------------------
+
+  private set(view: View): void {
+    this.view = this.clamped(view);
+    this.viewport.setAttribute(
+      'transform',
+      `translate(${this.view.x} ${this.view.y}) scale(${this.view.k})`,
+    );
   }
 
   private apply(): void {
-    this.viewport.setAttribute(
-      'transform',
-      `translate(${this.translate.x} ${this.translate.y}) scale(${this.scale})`,
+    this.set(this.view);
+  }
+
+  /** Keeps a decent part of the tree on screen, however hard it is flung. */
+  private clamped(view: View): View {
+    const box = this.svg.getBoundingClientRect();
+    if (box.width === 0) return view;
+    const k = clamp(view.k, MIN_SCALE, MAX_SCALE);
+    const width = this.layout.width * k;
+    const height = this.layout.height * k;
+    return {
+      k,
+      x: clamp(view.x, box.width * 0.25 - width, box.width * 0.75),
+      y: clamp(view.y, box.height * 0.2 - height, box.height * 0.8),
+    };
+  }
+
+  private zoomAround(factor: number, originX: number, originY: number): void {
+    const k = clamp(this.view.k * factor, MIN_SCALE, MAX_SCALE);
+    const ratio = k / this.view.k;
+    this.set({
+      k,
+      x: originX - (originX - this.view.x) * ratio,
+      y: originY - (originY - this.view.y) * ratio,
+    });
+  }
+
+  private animateTo(target: View, duration = 260): void {
+    cancelAnimationFrame(this.animation);
+    this.stopMomentum();
+    const from = { ...this.view };
+    const to = this.clamped(target);
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced || duration === 0) {
+      this.set(to);
+      return;
+    }
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = Math.min((now - start) / duration, 1);
+      // Material's standard easing: quick out, gentle in.
+      const e = 1 - Math.pow(1 - t, 3);
+      this.set({
+        k: from.k + (to.k - from.k) * e,
+        x: from.x + (to.x - from.x) * e,
+        y: from.y + (to.y - from.y) * e,
+      });
+      if (t < 1) this.animation = requestAnimationFrame(step);
+    };
+    this.animation = requestAnimationFrame(step);
+  }
+
+  private stopMomentum(): void {
+    cancelAnimationFrame(this.momentum);
+    this.momentum = 0;
+  }
+
+  // ---- gestures -----------------------------------------------------------
+
+  private bindGestures(): void {
+    const pointers = new Map<number, { x: number; y: number }>();
+    let pinch = 0;
+    let centre = { x: 0, y: 0 };
+    let travelled = 0;
+    let pressed: string | undefined;
+    let velocity = { x: 0, y: 0 };
+    let lastMove = 0;
+    let lastTap = { t: 0, x: 0, y: 0 };
+
+    const local = (event: { clientX: number; clientY: number }) => {
+      const box = this.svg.getBoundingClientRect();
+      return { x: event.clientX - box.left, y: event.clientY - box.top };
+    };
+
+    this.svg.addEventListener('pointerdown', (event) => {
+      this.stopMomentum();
+      cancelAnimationFrame(this.animation);
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      try {
+        this.svg.setPointerCapture(event.pointerId);
+      } catch {
+        // Synthetic or already-released pointers cannot be captured; panning
+        // still works through the events themselves.
+      }
+      travelled = 0;
+      velocity = { x: 0, y: 0 };
+      lastMove = event.timeStamp;
+      if (pointers.size === 2) {
+        pinch = spread(pointers);
+        centre = local(midpoint(pointers));
+      }
+      // Pointer capture retargets later events at the <svg>, so remember now
+      // what was actually pressed.
+      pressed = (event.target as Element | null)?.closest<SVGGElement>('.node')?.dataset.id;
+    });
+
+    this.svg.addEventListener('pointermove', (event) => {
+      const previous = pointers.get(event.pointerId);
+      if (!previous) return;
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+      if (pointers.size >= 2) {
+        // Two fingers pan and zoom at the same time, as everywhere else.
+        const next = spread(pointers);
+        const nextCentre = local(midpoint(pointers));
+        this.set({
+          k: this.view.k,
+          x: this.view.x + nextCentre.x - centre.x,
+          y: this.view.y + nextCentre.y - centre.y,
+        });
+        if (pinch > 0 && next > 0) this.zoomAround(next / pinch, nextCentre.x, nextCentre.y);
+        pinch = next;
+        centre = nextCentre;
+        travelled = Infinity;
+        return;
+      }
+
+      const dx = event.clientX - previous.x;
+      const dy = event.clientY - previous.y;
+      travelled += Math.hypot(dx, dy);
+      const dt = Math.max(event.timeStamp - lastMove, 1);
+      lastMove = event.timeStamp;
+      velocity = { x: mix(velocity.x, dx / dt, 0.35), y: mix(velocity.y, dy / dt, 0.35) };
+      this.element.classList.add('is-panning');
+      this.set({ k: this.view.k, x: this.view.x + dx, y: this.view.y + dy });
+    });
+
+    const release = (event: PointerEvent) => {
+      pointers.delete(event.pointerId);
+      if (pointers.size < 2) pinch = 0;
+      if (pointers.size > 0) return;
+      this.element.classList.remove('is-panning');
+
+      if (travelled < TAP_SLOP) {
+        if (pressed) {
+          this.onSelect(pressed);
+        } else {
+          const point = local(event);
+          const isDouble =
+            event.timeStamp - lastTap.t < DOUBLE_TAP_MS &&
+            Math.hypot(point.x - lastTap.x, point.y - lastTap.y) < 40;
+          if (isDouble) {
+            this.doubleTap(point.x, point.y);
+            lastTap = { t: 0, x: 0, y: 0 };
+          } else {
+            lastTap = { t: event.timeStamp, x: point.x, y: point.y };
+          }
+        }
+      } else if (travelled !== Infinity) {
+        this.flick(velocity);
+      }
+      pressed = undefined;
+    };
+    this.svg.addEventListener('pointerup', release);
+    this.svg.addEventListener('pointercancel', release);
+
+    this.svg.addEventListener(
+      'wheel',
+      (event) => {
+        // Also catches the trackpad pinch, which arrives as ctrl+wheel.
+        event.preventDefault();
+        this.stopMomentum();
+        const point = local(event);
+        this.zoomAround(Math.exp(-event.deltaY * (event.ctrlKey ? 0.01 : 0.0018)), point.x, point.y);
+      },
+      { passive: false },
     );
+
+    // Long-press on a bubble should not raise the browser's own menu.
+    this.svg.addEventListener('contextmenu', (event) => event.preventDefault());
+
+    this.svg.addEventListener('keydown', (event) => {
+      const id = (event.target as Element | null)?.closest<SVGGElement>('.node')?.dataset.id;
+      if (id && (event.key === 'Enter' || event.key === ' ')) {
+        event.preventDefault();
+        this.onSelect(id);
+        return;
+      }
+      const pan: Record<string, [number, number]> = {
+        ArrowLeft: [80, 0],
+        ArrowRight: [-80, 0],
+        ArrowUp: [0, 80],
+        ArrowDown: [0, -80],
+      };
+      const step = pan[event.key];
+      if (step) {
+        event.preventDefault();
+        this.set({ k: this.view.k, x: this.view.x + step[0], y: this.view.y + step[1] });
+      }
+      if (event.key === '+' || event.key === '-') {
+        event.preventDefault();
+        const box = this.svg.getBoundingClientRect();
+        this.zoomAround(event.key === '+' ? 1.3 : 1 / 1.3, box.width / 2, box.height / 2);
+      }
+    });
+  }
+
+  private doubleTap(x: number, y: number): void {
+    if (this.view.k >= 1.5) {
+      this.frameAnimated();
+      return;
+    }
+    const k = clamp(this.view.k * 2, MIN_SCALE, MAX_SCALE);
+    const ratio = k / this.view.k;
+    this.animateTo({ k, x: x - (x - this.view.x) * ratio, y: y - (y - this.view.y) * ratio });
+  }
+
+  private frameAnimated(): void {
+    const before = { ...this.view };
+    this.frame();
+    const target = { ...this.view };
+    this.view = before;
+    this.animateTo(target);
+  }
+
+  /** Keeps the tree gliding after a flick, the way a map does. */
+  private flick(velocity: { x: number; y: number }): void {
+    let vx = clamp(velocity.x, -4, 4);
+    let vy = clamp(velocity.y, -4, 4);
+    if (Math.hypot(vx, vy) < 0.15) return;
+    let last = performance.now();
+    const step = (now: number) => {
+      const dt = Math.min(now - last, 32);
+      last = now;
+      this.set({ k: this.view.k, x: this.view.x + vx * dt, y: this.view.y + vy * dt });
+      const decay = Math.pow(0.94, dt / 16);
+      vx *= decay;
+      vy *= decay;
+      if (Math.hypot(vx, vy) > 0.02) this.momentum = requestAnimationFrame(step);
+    };
+    this.momentum = requestAnimationFrame(step);
   }
 
   // ---- drawing ------------------------------------------------------------
 
+  private buildFab(): HTMLElement {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'fab';
+    button.title = 'Ganzen Stammbaum zeigen';
+    button.setAttribute('aria-label', 'Ganzen Stammbaum zeigen');
+    button.append(icon('fit'));
+    button.addEventListener('click', () => this.fit());
+    return button;
+  }
+
   private drawLinks(): SVGGElement {
     const group = svgEl('g', { class: 'links' });
     const lanes = assignLanes(this.layout);
+
     for (const union of this.layout.unions) {
       const partners = union.partners
         .map((id) => this.layout.nodes.get(id))
@@ -123,7 +390,12 @@ export class OverviewView {
             y2: right.y,
           }),
         );
-        group.append(this.marriageBadge(union.x, union.y, state));
+        const label = unionLabel(union);
+        if (label) {
+          const text = svgEl('text', { class: 'union-label', x: union.x, y: union.y - 8 });
+          text.textContent = label;
+          group.append(text);
+        }
       }
 
       const children = union.children
@@ -137,7 +409,7 @@ export class OverviewView {
         svgEl('path', {
           class: 'link link-descent',
           d: [
-            `M ${union.x} ${union.y + (partners.length > 1 ? 16 : METRICS.bubbleRadius)}`,
+            `M ${union.x} ${union.y + (partners.length > 1 ? 6 : METRICS.bubbleRadius)}`,
             `L ${union.x} ${busY}`,
             `M ${Math.min(...xs, union.x)} ${busY}`,
             `L ${Math.max(...xs, union.x)} ${busY}`,
@@ -147,15 +419,6 @@ export class OverviewView {
       );
     }
     return group;
-  }
-
-  private marriageBadge(x: number, y: number, state: string): SVGGElement {
-    const badge = svgEl('g', { class: `badge badge-${state}`, transform: `translate(${x} ${y})` });
-    badge.append(svgEl('circle', { r: 13, class: 'badge-disc' }));
-    const glyph = svgEl('text', { class: 'badge-glyph', y: 5 });
-    glyph.textContent = state === 'divorced' ? '💔' : '💍';
-    badge.append(glyph);
-    return badge;
   }
 
   private drawNodes(): SVGGElement {
@@ -181,151 +444,66 @@ export class OverviewView {
     });
     group.dataset.id = person.id;
 
-    // Plumbob — the Sims theme shows it on hover/focus, other themes hide it.
-    group.append(
-      svgEl('path', { class: 'plumbob', d: `M 0 ${-r - 34} L 11 ${-r - 18} L 0 ${-r - 2} L -11 ${-r - 18} Z` }),
-    );
-    group.append(svgEl('circle', { class: 'bubble-ring', r: r + 4 }));
+    group.append(svgEl('circle', { class: 'bubble-ring', r: r + 3 }));
     group.append(svgEl('circle', { class: 'bubble', r }));
 
     const url = photoUrl(person);
     if (url) {
       const clipId = `clip-${person.id}`;
       const clip = svgEl('clipPath', { id: clipId });
-      clip.append(svgEl('circle', { r: r - 2 }));
+      clip.append(svgEl('circle', { r }));
       group.append(clip);
       group.append(
         svgEl('image', {
           href: url,
-          x: -r + 2,
-          y: -r + 2,
-          width: (r - 2) * 2,
-          height: (r - 2) * 2,
+          x: -r,
+          y: -r,
+          width: r * 2,
+          height: r * 2,
           preserveAspectRatio: 'xMidYMid slice',
           'clip-path': `url(#${clipId})`,
         }),
       );
     } else {
       group.append(
-        svgEl('circle', { class: 'bubble-fill', r: r - 2, style: `fill: hsl(${avatarHue(person.id)} 55% 78%)` }),
+        svgEl('circle', {
+          class: 'bubble-fill',
+          r,
+          style: `fill: hsl(${avatarHue(person.id)} 42% 86%)`,
+        }),
       );
-      const text = svgEl('text', { class: 'bubble-initials', y: 9 });
+      const text = svgEl('text', { class: 'bubble-initials', y: 8 });
       text.textContent = initials(person);
       group.append(text);
     }
 
-    const first = svgEl('text', { class: 'node-name', y: r + 24 });
+    const first = svgEl('text', { class: 'node-name', y: r + 22 });
     first.textContent = shortName(person);
     group.append(first);
 
     const last = familyName(person);
     if (last) {
-      const surname = svgEl('text', { class: 'node-surname', y: r + 40 });
+      const surname = svgEl('text', { class: 'node-surname', y: r + 38 });
       surname.textContent = last;
       group.append(surname);
     }
 
     const years = lifespan(person);
     if (years) {
-      const dates = svgEl('text', { class: 'node-years', y: r + (last ? 56 : 40) });
+      const dates = svgEl('text', { class: 'node-years', y: r + (last ? 54 : 38) });
       dates.textContent = years;
       group.append(dates);
     }
     return group;
   }
+}
 
-  private buildControls(): HTMLElement {
-    const bar = document.createElement('div');
-    bar.className = 'zoom-bar';
-    const buttons: Array<[string, string, () => void]> = [
-      ['−', 'Herauszoomen', () => this.zoomBy(1 / 1.3)],
-      ['⛶', 'Ganzen Baum zeigen', () => this.fit()],
-      ['+', 'Hineinzoomen', () => this.zoomBy(1.3)],
-    ];
-    for (const [glyph, label, action] of buttons) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'chip';
-      button.textContent = glyph;
-      button.title = label;
-      button.setAttribute('aria-label', label);
-      button.addEventListener('click', action);
-      bar.append(button);
-    }
-    return bar;
-  }
-
-  // ---- interaction --------------------------------------------------------
-
-  private bindPointer(): void {
-    const pointers = new Map<number, { x: number; y: number }>();
-    let pinchDistance = 0;
-    let moved = 0;
-    // Pointer capture retargets pointerup at the <svg>, so remember what was
-    // actually pressed.
-    let pressed: string | undefined;
-
-    this.svg.addEventListener('pointerdown', (event) => {
-      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-      this.svg.setPointerCapture(event.pointerId);
-      if (pointers.size === 2) pinchDistance = distance(pointers);
-      moved = 0;
-      pressed = (event.target as Element | null)?.closest<SVGGElement>('.node')?.dataset.id;
-    });
-
-    this.svg.addEventListener('pointermove', (event) => {
-      const previous = pointers.get(event.pointerId);
-      if (!previous) return;
-      const point = { x: event.clientX, y: event.clientY };
-      pointers.set(event.pointerId, point);
-
-      if (pointers.size === 2) {
-        const next = distance(pointers);
-        if (pinchDistance > 0) {
-          const box = this.svg.getBoundingClientRect();
-          const centre = midpoint(pointers);
-          this.zoomBy(next / pinchDistance, centre.x - box.left, centre.y - box.top);
-        }
-        pinchDistance = next;
-        moved = 99;
-        return;
-      }
-      const dx = point.x - previous.x;
-      const dy = point.y - previous.y;
-      moved += Math.abs(dx) + Math.abs(dy);
-      this.translate = { x: this.translate.x + dx, y: this.translate.y + dy };
-      this.element.classList.add('is-panning');
-      this.apply();
-    });
-
-    const release = (event: PointerEvent) => {
-      pointers.delete(event.pointerId);
-      if (pointers.size < 2) pinchDistance = 0;
-      this.element.classList.remove('is-panning');
-      if (moved < 6 && pressed) this.onSelect(pressed);
-      pressed = undefined;
-    };
-    this.svg.addEventListener('pointerup', release);
-    this.svg.addEventListener('pointercancel', release);
-
-    this.svg.addEventListener(
-      'wheel',
-      (event) => {
-        event.preventDefault();
-        const box = this.svg.getBoundingClientRect();
-        this.zoomBy(Math.exp(-event.deltaY * 0.0015), event.clientX - box.left, event.clientY - box.top);
-      },
-      { passive: false },
-    );
-
-    this.svg.addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
-      const id = (event.target as Element | null)?.closest<SVGGElement>('.node')?.dataset.id;
-      if (!id) return;
-      event.preventDefault();
-      this.onSelect(id);
-    });
-  }
+/** `1956` for a marriage, `1984–1996` once it ended. */
+function unionLabel(union: UnionEdge): string {
+  const from = year(union.married);
+  const to = year(union.divorced);
+  if (from && to) return `${from}–${to}`;
+  return to ? `–${to}` : from;
 }
 
 /**
@@ -358,14 +536,22 @@ function assignLanes(layout: Layout): Map<string, number> {
   return lanes;
 }
 
-function distance(pointers: Map<number, { x: number; y: number }>): number {
+type Point = { x: number; y: number };
+
+function spread(pointers: Map<number, Point>): number {
   const [a, b] = [...pointers.values()];
   return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
 }
 
-function midpoint(pointers: Map<number, { x: number; y: number }>): { x: number; y: number } {
+function midpoint(pointers: Map<number, Point>): { clientX: number; clientY: number } {
   const [a, b] = [...pointers.values()];
-  return a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : { x: 0, y: 0 };
+  return a && b
+    ? { clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 }
+    : { clientX: 0, clientY: 0 };
+}
+
+function mix(previous: number, next: number, weight: number): number {
+  return previous * (1 - weight) + next * weight;
 }
 
 function clamp(value: number, min: number, max: number): number {

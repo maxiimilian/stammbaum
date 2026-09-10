@@ -1,28 +1,41 @@
 import './styles/base.css';
-import './styles/theme-sims.css';
+import './styles/theme-material.css';
 import './styles/theme-neutral.css';
 
 import { loadFamily } from './data';
 import { Family } from './family';
 import { OverviewView } from './views/overview';
 import { renderPerson } from './views/person';
+import { iconButton } from './ui/icons';
 import type { Person } from './parser/types';
 import { lifespan } from './ui/format';
 
 const THEMES = [
-  { id: 'sims', label: '🔮 Sims' },
-  { id: 'neutral', label: '📄 Schlicht' },
+  { id: 'material', label: 'Material' },
+  { id: 'neutral', label: 'Papier' },
 ] as const;
 
 const family = new Family(loadFamily());
+const appBar = must<HTMLElement>('.app-bar');
+const actions = must<HTMLElement>('.app-actions');
 const view = must<HTMLElement>('#view');
 const searchInput = must<HTMLInputElement>('#search');
 const results = must<HTMLUListElement>('#results');
-const backButton = must<HTMLButtonElement>('#back');
-const themeButton = must<HTMLButtonElement>('#theme');
+const title = must<HTMLAnchorElement>('#family-title');
+
+const backButton = iconButton('back', 'Zurück zur Übersicht');
+const searchToggle = iconButton('search', 'Person suchen');
+const themeButton = iconButton('theme', 'Design wechseln');
+backButton.id = 'back';
+searchToggle.id = 'search-toggle';
+themeButton.id = 'theme';
+searchToggle.classList.add('search-toggle');
+searchToggle.setAttribute('aria-pressed', 'false');
+backButton.hidden = true;
+actions.append(backButton, searchToggle, themeButton);
 
 document.title = family.graph.title;
-must<HTMLElement>('#family-title').textContent = family.graph.title;
+title.textContent = family.graph.title;
 
 const overview = new OverviewView(family, (id) => {
   location.hash = `#/p/${encodeURIComponent(id)}`;
@@ -34,6 +47,7 @@ function route(): void {
   const match = /^#\/p\/(.+)$/.exec(location.hash);
   const person = match ? family.person(decodeURIComponent(match[1]!)) : undefined;
   closeResults();
+  closeSearch();
 
   if (person) {
     view.replaceChildren(renderPerson(family, person));
@@ -46,6 +60,7 @@ function route(): void {
 
   view.replaceChildren(overview.element);
   overview.activate();
+  showGestureHint();
   backButton.hidden = true;
   document.title = family.graph.title;
 }
@@ -65,11 +80,33 @@ function closeResults(): void {
   searchInput.setAttribute('aria-expanded', 'false');
 }
 
-function openPerson(person: Person): void {
+/** On a phone the field lives under the bar and is opened by the search icon. */
+function openSearch(): void {
+  appBar.classList.add('is-searching');
+  searchToggle.setAttribute('aria-pressed', 'true');
+  searchInput.focus();
+}
+
+function closeSearch(): void {
+  appBar.classList.remove('is-searching');
+  searchToggle.setAttribute('aria-pressed', 'false');
   searchInput.value = '';
+}
+
+searchToggle.addEventListener('click', () => {
+  if (appBar.classList.contains('is-searching')) {
+    closeResults();
+    closeSearch();
+  } else {
+    openSearch();
+  }
+});
+
+function openPerson(person: Person): void {
   closeResults();
+  closeSearch();
   searchInput.blur();
-  // On the overview a search hit centres the bubble instead of leaving the map.
+  // On the overview a hit centres the bubble instead of leaving the map.
   if (location.hash === '' || location.hash === '#/') overview.highlight(person.id);
   else location.hash = `#/p/${encodeURIComponent(person.id)}`;
 }
@@ -104,23 +141,26 @@ searchInput.addEventListener('input', () => {
 searchInput.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && hits[0]) openPerson(hits[0]);
   if (event.key === 'Escape') {
-    searchInput.value = '';
     closeResults();
+    closeSearch();
   }
 });
 
 document.addEventListener('pointerdown', (event) => {
-  if (!(event.target as Element | null)?.closest('.search')) closeResults();
+  const target = event.target as Element | null;
+  if (target?.closest('.search') || target?.closest('.search-toggle')) return;
+  closeResults();
+  if (searchInput.value === '') closeSearch();
 });
 
 // ---- theme ----------------------------------------------------------------
 
 function applyTheme(id: string): void {
   const theme = THEMES.find((t) => t.id === id) ?? THEMES[0];
-  document.documentElement.dataset.theme = theme.id;
   const next = THEMES[(THEMES.findIndex((t) => t.id === theme.id) + 1) % THEMES.length]!;
-  themeButton.textContent = theme.label;
-  themeButton.title = `Design wechseln (nächstes: ${next.label})`;
+  document.documentElement.dataset.theme = theme.id;
+  themeButton.title = `Design: ${theme.label} — wechseln zu ${next.label}`;
+  themeButton.setAttribute('aria-label', themeButton.title);
   try {
     localStorage.setItem('stammbaum-theme', theme.id);
   } catch {
@@ -134,32 +174,64 @@ themeButton.addEventListener('click', () => {
   applyTheme(THEMES[(index + 1) % THEMES.length]!.id);
 });
 
-let stored: string | null = null;
-try {
-  stored = localStorage.getItem('stammbaum-theme');
-} catch {
-  stored = null;
+applyTheme(readStored('stammbaum-theme') ?? THEMES[0].id);
+
+// ---- one-off gesture hint -------------------------------------------------
+
+function showGestureHint(): void {
+  if (readStored('stammbaum-hint') === 'seen') return;
+  const touch = matchMedia('(pointer: coarse)').matches;
+  const hint = document.createElement('div');
+  hint.className = 'hint';
+  hint.textContent = touch
+    ? 'Ziehen zum Bewegen · zwei Finger zum Zoomen · tippen für eine Person'
+    : 'Ziehen zum Bewegen · Mausrad zum Zoomen · Klick für eine Person';
+  overview.element.append(hint);
+  writeStored('stammbaum-hint', 'seen');
+
+  const dismiss = () => {
+    hint.classList.add('is-leaving');
+    setTimeout(() => hint.remove(), 400);
+  };
+  setTimeout(dismiss, 6000);
+  overview.element.addEventListener('pointerdown', dismiss, { once: true });
 }
-applyTheme(stored ?? THEMES[0].id);
 
 // ---- parse warnings -------------------------------------------------------
 
 if (family.graph.warnings.length > 0) {
   const banner = document.createElement('div');
   banner.className = 'warnings';
-  banner.innerHTML = `<strong>${family.graph.warnings.length} Hinweis(e) in family.md</strong>`;
+  const heading = document.createElement('strong');
+  heading.textContent = `${family.graph.warnings.length} Hinweis(e) in family.md`;
   const list = document.createElement('ul');
   for (const warning of family.graph.warnings.slice(0, 8)) {
     const item = document.createElement('li');
     item.textContent = warning.line > 0 ? `Zeile ${warning.line}: ${warning.message}` : warning.message;
     list.append(item);
   }
-  banner.append(list);
+  banner.append(heading, list);
   banner.addEventListener('click', () => banner.remove());
   document.body.append(banner);
 }
 
 route();
+
+function readStored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Nothing to do — the hint will show again next time.
+  }
+}
 
 function must<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);

@@ -117,7 +117,7 @@ function section(className: string, label: string): HTMLElement {
 function focusCard(person: Person): HTMLElement {
   const card = document.createElement('div');
   card.className = `focus-card${person.died ? ' is-deceased' : ''}`;
-  card.append(bubble(person, 168));
+  card.append(bubble(person));
 
   const name = document.createElement('h1');
   name.className = 'focus-name';
@@ -149,9 +149,14 @@ function relationPill(union: Union): HTMLElement {
   const divorced = union.divorced !== undefined;
   pill.className = `relation-pill${divorced ? ' is-divorced' : ''}`;
   const from = year(union.married);
-  pill.textContent = divorced
-    ? `💔 ${[from, year(union.divorced)].filter(Boolean).join(' – ') || 'geschieden'}`
-    : `💍 ${from || 'verheiratet'}`;
+  const to = year(union.divorced);
+  if (divorced) {
+    pill.textContent = [from, to].filter(Boolean).join(' – ') || 'geschieden';
+    pill.title = `geschieden${to ? ` ${to}` : ''}`;
+  } else {
+    pill.textContent = from ? `seit ${from}` : 'verheiratet';
+    pill.title = `verheiratet${from ? ` seit ${from}` : ''}`;
+  }
   return pill;
 }
 
