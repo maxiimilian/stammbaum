@@ -4,6 +4,7 @@
  * in base.css. Copy this file to make a different look.
  */
 
+:root,
 :root[data-theme='material'] {
   --font: system-ui, Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-display: system-ui, Roboto, 'Helvetica Neue', Arial, sans-serif;
