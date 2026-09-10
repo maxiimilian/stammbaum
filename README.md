@@ -1,1 +1,155 @@
-# ancestry
+# Stammbaum
+
+A pocket "who is who" for family gatherings. Built mobile first — the phone in
+your pocket at the party is the primary target, the desktop layout is the
+enhancement. Two screens, one markdown file:
+
+- **Übersicht** — the whole tree as a map you drag, pinch and flick around.
+- **Person** — one person with their first-degree relatives only: parents on
+  top, partners beside (below, on a phone), children underneath.
+
+The data lives in [`data/family.md`](data/family.md) and is written in a
+mermaid-flavoured DSL, so the tree is edited like text and reviewed like code.
+
+## Gestures
+
+The overview has no zoom buttons; it is driven by gestures, the same ones a map
+app uses.
+
+| Gesture | |
+| --- | --- |
+| Drag / flick | Pan, with momentum afterwards |
+| Two-finger pinch | Zoom, around the point between your fingers |
+| Double-tap | Zoom in at that point; again when zoomed in, back out |
+| Tap a bubble | Open that person |
+| Mouse wheel, trackpad pinch | Zoom at the cursor |
+| Arrow keys, `+` / `-`, Enter | The same, from the keyboard |
+
+The tree is clamped so it can never be flung off screen, and the button in the
+bottom corner zooms out to the whole family.
+
+## Running it
+
+```sh
+npm install
+npm run dev          # http://localhost:5173
+npm test             # parser, graph and layout tests
+npm run build        # dist/ — a normal static site
+npm run build:single # dist/index.html — ONE self-contained file, works offline
+```
+
+`build:single` inlines the script, the styles and every photo as `data:` URIs.
+The result is a single HTML file you can mail to relatives or open from a USB
+stick with no server and no network — which is usually what a family gathering
+in a house with bad reception actually needs.
+
+## Writing the family file
+
+Everything the app shows comes from the ```` ```family ```` block(s) in
+`data/family.md`. Prose outside those blocks is ignored, so document the family
+in the same file.
+
+```family
+person heinrich  "Heinrich Bauer"  born=1931-04-02 died=2011-08-17 photo=heinrich.jpg
+person elisabeth "Elisabeth Bauer" born=1934-11-23 maiden=Vogt nick=Oma
+
+heinrich + elisabeth married=1956-05-19 -> klaus, brigitte
+
+%% Divorced, then married again: two partnerships, one line each.
+klaus + sabine married=1984 divorced=1996 -> nina, jonas
+klaus + carmen married=2001 -> luca
+```
+
+| Statement | Meaning |
+| --- | --- |
+| `person <id> "<Name>" key=value …` | Declares a person. |
+| `<a> + <b> key=value …` | A partnership. |
+| `<a> + <b> -> <child>, <child>` | Children of that partnership. |
+| `<a> -> <child>` | Children whose second parent is unknown. |
+| `%% …` | Comment. |
+
+**Person keys** — `born`, `died`, `photo`, `maiden`, `nick`, `note`.
+**Partnership keys** — `married`, `divorced`, `children`.
+
+Notes:
+
+- Dates are free text, but `1956`, `1956-04` and `1956-04-02` are formatted
+  nicely (`* 2. April 1956`); anything else is printed as written.
+- Ids are the deep-link handles — `#/p/klaus` opens Klaus directly — so keep
+  them short, lowercase and stable.
+- `nick` wins over the first name in bubbles: the tree says *Oma*, the detail
+  view says *Elisabeth Bauer*.
+- Statements about one partnership may be split across lines and written in
+  either partner order; they merge.
+- Photos are file names inside [`data/photos/`](data/photos). Anyone without a
+  photo gets an initials bubble in a colour derived from their id.
+- Undeclared ids still render, and the app shows a dismissible list of hints
+  about the file — a half-finished tree never breaks the page.
+
+## Appearance
+
+The button in the app bar cycles **Automatisch → Hell → Dunkel**, and the choice
+is remembered. "Automatisch" follows the phone's own light/dark setting and
+switches with it; the two explicit modes override it. The phone's status bar
+colour follows along.
+
+The switching is daisyUI's, not hand-rolled:
+
+```css
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark;
+}
+```
+
+`--prefersdark` is what makes the dark theme apply on its own under
+`prefers-color-scheme: dark`; setting `data-theme="light"` or `"dark"` on
+`<html>` overrides it. Adding another daisyUI theme — or a custom one — is a
+matter of putting its name in that list.
+
+Everything in [`src/styles/app.css`](src/styles/app.css) is written against
+daisyUI's semantic variables (`--color-base-100…300`, `--color-base-content`,
+`--color-primary`, `--color-error`, `--radius-*`), so both themes are handled by
+the same rules and nothing carries a hardcoded colour. The per-person avatar
+tint is mixed into the current surface rather than picked per theme:
+
+```css
+fill: color-mix(in oklab, hsl(var(--avatar-h) 70% 55%) 26%, var(--color-base-100));
+```
+
+which is why the bubbles are pale in light mode and deep in dark mode without a
+second palette existing anywhere.
+
+## How it is built
+
+Vite + TypeScript with Tailwind CSS 4 and daisyUI 5 for the styling and the
+theme system; no UI framework and no runtime JavaScript dependencies. Tailwind
+and daisyUI are build-time only, so the offline file still fetches nothing —
+about 36 kB of JavaScript and 62 kB of CSS, both tree-shaken to what the app
+actually uses. Icons are inline SVG, so there is no icon font either.
+
+The overview is one SVG with a transform for pan and zoom, driven by Pointer
+Events so mouse, trackpad, pen and touch all take the same code path. The person
+view is HTML with connectors drawn into an SVG overlay after layout, so it
+reflows correctly from a 390 px phone up. daisyUI supplies the chrome — navbar,
+buttons, card, badges, menu — while the tree and the person view keep their own
+component classes, because utility strings inside generated SVG would be
+unreadable.
+
+```
+data/family.md          the family, and the format documented in prose
+data/photos/            photos, inlined by the offline build
+src/parser/             markdown → { people, unions, warnings }
+src/family.ts           derived lookups: parents, partnerships, broods, search
+src/layout/layout.ts    generations, tidy horizontal placement, refinement sweep
+src/ui/icons.ts         inline stroked SVG icons
+src/views/overview.ts   the gesture-driven SVG tree
+src/views/person.ts     one person and their first-degree relatives
+src/styles/app.css      Tailwind + daisyUI setup and every component rule
+tests/                  parser, family and layout tests (vitest)
+```
+
+The layout is a two-stage tidy tree: a recursive walk places each couple above
+the middle of its children, then a relaxation sweep pulls couples towards their
+children and children towards their parents without ever reordering a row. Two
+families that marry into each other end up next to each other instead of at
+opposite ends of the page.

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Stammbaum — wer ist noch mal wer?" />
+    <meta name="theme-color" content="#ffffff" id="theme-color" />
+    <title>Stammbaum</title>
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <header
+        class="app-bar navbar z-30 min-h-14 flex-wrap gap-1 border-b border-base-300 bg-base-100 px-2 py-0"
+      >
+        <a href="#/" class="btn btn-ghost h-12 min-h-0 gap-2 px-2 text-base font-semibold">
+          <span
+            class="grid size-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"
+            id="crest"
+          ></span>
+          <span id="family-title" class="max-w-[10rem] truncate sm:max-w-none">Stammbaum</span>
+        </a>
+
+        <div class="app-actions ml-auto flex items-center gap-1"></div>
+
+        <div class="search" role="search">
+          <input
+            id="search"
+            type="search"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Wer ist das?"
+            aria-label="Person suchen"
+            aria-expanded="false"
+            class="input input-lg h-12 w-full rounded-full bg-base-200 text-base"
+          />
+          <ul id="results" class="results menu w-auto rounded-box bg-base-100 p-2 shadow-xl" role="listbox" hidden></ul>
+        </div>
+      </header>
+
+      <main id="view" class="view"></main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
