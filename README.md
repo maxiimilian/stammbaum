@@ -86,33 +86,54 @@ Notes:
 - Undeclared ids still render, and the app shows a dismissible list of hints
   about the file — a half-finished tree never breaks the page.
 
-## Themes
+## Appearance
 
-The default theme is **Material**: Material 3 baseline colour roles, elevation
-and shape tokens, a top app bar, tonal chips and a FAB. The button in the app bar
-switches to **Papier**, a calm printed-genealogy look, and the choice is
-remembered.
+The button in the app bar cycles **Automatisch → Hell → Dunkel**, and the choice
+is remembered. "Automatisch" follows the phone's own light/dark setting and
+switches with it; the two explicit modes override it. The phone's status bar
+colour follows along.
 
-Structure and theme are strictly separated:
+The switching is daisyUI's, not hand-rolled:
 
-- [`src/styles/base.css`](src/styles/base.css) — layout only, no colours, and
-  mobile first: phone styles are the defaults, `@media (min-width: 800px)` adds
-  what a bigger screen can afford.
-- [`src/styles/theme-material.css`](src/styles/theme-material.css),
-  [`src/styles/theme-neutral.css`](src/styles/theme-neutral.css) — the same set
-  of custom properties on `:root[data-theme='…']`, plus a few decorative rules.
+```css
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark;
+}
+```
 
-To add a theme, copy a theme file, change the values, and add it to `THEMES` in
-[`src/main.ts`](src/main.ts).
+`--prefersdark` is what makes the dark theme apply on its own under
+`prefers-color-scheme: dark`; setting `data-theme="light"` or `"dark"` on
+`<html>` overrides it. Adding another daisyUI theme — or a custom one — is a
+matter of putting its name in that list.
+
+Everything in [`src/styles/app.css`](src/styles/app.css) is written against
+daisyUI's semantic variables (`--color-base-100…300`, `--color-base-content`,
+`--color-primary`, `--color-error`, `--radius-*`), so both themes are handled by
+the same rules and nothing carries a hardcoded colour. The per-person avatar
+tint is mixed into the current surface rather than picked per theme:
+
+```css
+fill: color-mix(in oklab, hsl(var(--avatar-h) 70% 55%) 26%, var(--color-base-100));
+```
+
+which is why the bubbles are pale in light mode and deep in dark mode without a
+second palette existing anywhere.
 
 ## How it is built
 
-Vite + TypeScript, no UI framework and no runtime dependencies — the whole app
-is ~34 kB of JavaScript, icons included (they are inline SVG, so there is no
-icon font to load). The overview is one SVG with a transform for pan and zoom,
-driven by Pointer Events so mouse, trackpad, pen and touch all take the same
-code path. The person view is HTML with connectors drawn into an SVG overlay
-after layout, so it reflows correctly from a 390 px phone up.
+Vite + TypeScript with Tailwind CSS 4 and daisyUI 5 for the styling and the
+theme system; no UI framework and no runtime JavaScript dependencies. Tailwind
+and daisyUI are build-time only, so the offline file still fetches nothing —
+about 36 kB of JavaScript and 62 kB of CSS, both tree-shaken to what the app
+actually uses. Icons are inline SVG, so there is no icon font either.
+
+The overview is one SVG with a transform for pan and zoom, driven by Pointer
+Events so mouse, trackpad, pen and touch all take the same code path. The person
+view is HTML with connectors drawn into an SVG overlay after layout, so it
+reflows correctly from a 390 px phone up. daisyUI supplies the chrome — navbar,
+buttons, card, badges, menu — while the tree and the person view keep their own
+component classes, because utility strings inside generated SVG would be
+unreadable.
 
 ```
 data/family.md          the family, and the format documented in prose
@@ -120,10 +141,10 @@ data/photos/            photos, inlined by the offline build
 src/parser/             markdown → { people, unions, warnings }
 src/family.ts           derived lookups: parents, partnerships, broods, search
 src/layout/layout.ts    generations, tidy horizontal placement, refinement sweep
-src/ui/icons.ts         inline Material-style icons
+src/ui/icons.ts         inline stroked SVG icons
 src/views/overview.ts   the gesture-driven SVG tree
 src/views/person.ts     one person and their first-degree relatives
-src/styles/             base.css + one file per theme
+src/styles/app.css      Tailwind + daisyUI setup and every component rule
 tests/                  parser, family and layout tests (vitest)
 ```
 

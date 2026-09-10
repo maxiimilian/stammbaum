@@ -93,7 +93,7 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
 
   if (parents.length === 0 && partnerships.length === 0 && broods.length === 0) {
     const empty = document.createElement('p');
-    empty.className = 'empty-note';
+    empty.className = 'opacity-60';
     empty.textContent = 'Keine Verwandten in der Datei hinterlegt.';
     root.append(empty);
   }
@@ -116,7 +116,7 @@ function section(className: string, label: string): HTMLElement {
 
 function focusCard(person: Person): HTMLElement {
   const card = document.createElement('div');
-  card.className = `focus-card${person.died ? ' is-deceased' : ''}`;
+  card.className = `focus-card card bg-base-100 shadow-sm${person.died ? ' is-deceased' : ''}`;
   card.append(bubble(person));
 
   const name = document.createElement('h1');
@@ -147,7 +147,9 @@ function line(className: string, text: string): HTMLElement {
 function relationPill(union: Union): HTMLElement {
   const pill = document.createElement('span');
   const divorced = union.divorced !== undefined;
-  pill.className = `relation-pill${divorced ? ' is-divorced' : ''}`;
+  pill.className = divorced
+    ? 'relation-pill is-divorced badge badge-sm badge-soft badge-error'
+    : 'relation-pill badge badge-sm badge-soft badge-primary';
   const from = year(union.married);
   const to = year(union.divorced);
   if (divorced) {

@@ -9,8 +9,11 @@ const PATHS = {
   search: ['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M16.2 16.2 21 21'],
   close: ['M6 6l12 12', 'M18 6 6 18'],
   fit: ['M4 9V5a1 1 0 0 1 1-1h4', 'M20 9V5a1 1 0 0 0-1-1h-4', 'M4 15v4a1 1 0 0 0 1 1h4', 'M20 15v4a1 1 0 0 1-1 1h-4'],
-  theme: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z', 'M12 3v18a9 9 0 0 0 0-18z'],
   person: ['M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M4.5 21a7.5 7.5 0 0 1 15 0'],
+  tree: ['M12 21v-6', 'M12 15 8 11', 'M12 13l4-4', 'M12 9a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M18 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'],
+  sun: ['M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z', 'M12 2v2', 'M12 20v2', 'M4.9 4.9l1.4 1.4', 'M17.7 17.7l1.4 1.4', 'M2 12h2', 'M20 12h2', 'M4.9 19.1l1.4-1.4', 'M17.7 6.3l1.4-1.4'],
+  moon: ['M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z'],
+  auto: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z', 'M12 3v18a9 9 0 0 0 0-18z'],
 } as const;
 
 export type IconName = keyof typeof PATHS;
@@ -23,8 +26,8 @@ export function icon(name: IconName): SVGSVGElement {
   for (const d of PATHS[name]) {
     const path = document.createElementNS(SVG_NS, 'path');
     path.setAttribute('d', d);
-    // The second half of the theme glyph is the filled side of the contrast disc.
-    if (name === 'theme' && d.startsWith('M12 3v18')) path.setAttribute('class', 'icon-solid');
+    // The second half of the "auto" glyph is the filled side of the contrast disc.
+    if (name === 'auto' && d.startsWith('M12 3v18')) path.setAttribute('class', 'icon-solid');
     svg.append(path);
   }
   return svg;
@@ -34,7 +37,7 @@ export function icon(name: IconName): SVGSVGElement {
 export function iconButton(name: IconName, label: string): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = 'icon-button';
+  button.className = 'btn btn-ghost btn-circle';
   button.title = label;
   button.setAttribute('aria-label', label);
   button.append(icon(name));

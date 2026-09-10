@@ -1,19 +1,25 @@
-import './styles/base.css';
-import './styles/theme-material.css';
-import './styles/theme-neutral.css';
+import './styles/app.css';
 
 import { loadFamily } from './data';
 import { Family } from './family';
 import { OverviewView } from './views/overview';
 import { renderPerson } from './views/person';
-import { iconButton } from './ui/icons';
+import { icon, iconButton, type IconName } from './ui/icons';
 import type { Person } from './parser/types';
 import { lifespan } from './ui/format';
 
-const THEMES = [
-  { id: 'material', label: 'Material' },
-  { id: 'neutral', label: 'Papier' },
-] as const;
+/**
+ * Three-way appearance switch. "system" leaves the choice to the OS: daisyUI's
+ * dark theme is registered with --prefersdark, so it applies on its own when no
+ * data-theme attribute is set.
+ */
+const MODES = [
+  { id: 'system', label: 'Automatisch', icon: 'auto' },
+  { id: 'light', label: 'Hell', icon: 'sun' },
+  { id: 'dark', label: 'Dunkel', icon: 'moon' },
+] as const satisfies ReadonlyArray<{ id: string; label: string; icon: IconName }>;
+
+type Mode = (typeof MODES)[number]['id'];
 
 const family = new Family(loadFamily());
 const appBar = must<HTMLElement>('.app-bar');
@@ -25,7 +31,7 @@ const title = must<HTMLAnchorElement>('#family-title');
 
 const backButton = iconButton('back', 'Zurück zur Übersicht');
 const searchToggle = iconButton('search', 'Person suchen');
-const themeButton = iconButton('theme', 'Design wechseln');
+const themeButton = iconButton('auto', 'Darstellung wechseln');
 backButton.id = 'back';
 searchToggle.id = 'search-toggle';
 themeButton.id = 'theme';
@@ -34,6 +40,7 @@ searchToggle.setAttribute('aria-pressed', 'false');
 backButton.hidden = true;
 actions.append(backButton, searchToggle, themeButton);
 
+must<HTMLElement>('#crest').append(icon('tree'));
 document.title = family.graph.title;
 title.textContent = family.graph.title;
 
@@ -123,10 +130,11 @@ searchInput.addEventListener('input', () => {
       item.setAttribute('role', 'option');
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'result';
+      button.className = 'result flex w-full items-baseline justify-between gap-3';
       const name = document.createElement('span');
       name.textContent = person.name;
       const years = document.createElement('small');
+      years.className = 'opacity-60 tabular-nums';
       years.textContent = lifespan(person);
       button.append(name, years);
       button.addEventListener('click', () => openPerson(person));
@@ -153,28 +161,59 @@ document.addEventListener('pointerdown', (event) => {
   if (searchInput.value === '') closeSearch();
 });
 
-// ---- theme ----------------------------------------------------------------
+// ---- appearance -----------------------------------------------------------
 
-function applyTheme(id: string): void {
-  const theme = THEMES.find((t) => t.id === id) ?? THEMES[0];
-  const next = THEMES[(THEMES.findIndex((t) => t.id === theme.id) + 1) % THEMES.length]!;
-  document.documentElement.dataset.theme = theme.id;
-  themeButton.title = `Design: ${theme.label} — wechseln zu ${next.label}`;
+function applyMode(id: string): void {
+  const mode = MODES.find((m) => m.id === id) ?? MODES[0];
+  const next = MODES[(MODES.findIndex((m) => m.id === mode.id) + 1) % MODES.length]!;
+
+  // No attribute means "let daisyUI follow prefers-color-scheme".
+  if (mode.id === 'system') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = mode.id;
+
+  themeButton.replaceChildren(icon(mode.icon));
+  themeButton.title = `Darstellung: ${mode.label} — umschalten auf ${next.label}`;
   themeButton.setAttribute('aria-label', themeButton.title);
+  writeStored('stammbaum-mode', mode.id);
+  paintThemeColor();
+}
+
+/** Keeps the phone's status bar in step with the theme. */
+function paintThemeColor(): void {
+  const meta = document.querySelector<HTMLMetaElement>('#theme-color');
+  if (!meta) return;
+  const shell = document.querySelector('.app-shell');
+  const surface = shell ? getComputedStyle(shell).backgroundColor : '';
+  if (surface) meta.content = toHex(surface) ?? surface;
+}
+
+/**
+ * daisyUI's palette is oklch, which older browsers will not parse in a
+ * theme-color tag. Painting one pixel and reading it back gives plain sRGB.
+ */
+function toHex(color: string): string | undefined {
   try {
-    localStorage.setItem('stammbaum-theme', theme.id);
+    const context = document.createElement('canvas').getContext('2d');
+    if (!context) return undefined;
+    context.fillStyle = color;
+    context.fillRect(0, 0, 1, 1);
+    const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+    if (r === undefined || g === undefined || b === undefined) return undefined;
+    return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
   } catch {
-    // Private browsing — the theme just won't be remembered.
+    return undefined;
   }
 }
 
 themeButton.addEventListener('click', () => {
-  const current = document.documentElement.dataset.theme ?? THEMES[0].id;
-  const index = THEMES.findIndex((t) => t.id === current);
-  applyTheme(THEMES[(index + 1) % THEMES.length]!.id);
+  const current = (readStored('stammbaum-mode') ?? 'system') as Mode;
+  const index = MODES.findIndex((m) => m.id === current);
+  applyMode(MODES[(index + 1) % MODES.length]!.id);
 });
 
-applyTheme(readStored('stammbaum-theme') ?? THEMES[0].id);
+applyMode(readStored('stammbaum-mode') ?? 'system');
+// Following the system means reacting when it changes.
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paintThemeColor);
 
 // ---- one-off gesture hint -------------------------------------------------
 
@@ -182,7 +221,7 @@ function showGestureHint(): void {
   if (readStored('stammbaum-hint') === 'seen') return;
   const touch = matchMedia('(pointer: coarse)').matches;
   const hint = document.createElement('div');
-  hint.className = 'hint';
+  hint.className = 'hint alert border-0 bg-neutral text-neutral-content shadow-lg';
   hint.textContent = touch
     ? 'Ziehen zum Bewegen · zwei Finger zum Zoomen · tippen für eine Person'
     : 'Ziehen zum Bewegen · Mausrad zum Zoomen · Klick für eine Person';
@@ -201,7 +240,7 @@ function showGestureHint(): void {
 
 if (family.graph.warnings.length > 0) {
   const banner = document.createElement('div');
-  banner.className = 'warnings';
+  banner.className = 'warnings alert alert-warning shadow-lg flex-col items-start gap-1';
   const heading = document.createElement('strong');
   heading.textContent = `${family.graph.warnings.length} Hinweis(e) in family.md`;
   const list = document.createElement('ul');

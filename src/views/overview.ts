@@ -360,7 +360,7 @@ export class OverviewView {
   private buildFab(): HTMLElement {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'fab';
+    button.className = 'fab-fit btn btn-primary btn-circle btn-lg shadow-lg';
     button.title = 'Ganzen Stammbaum zeigen';
     button.setAttribute('aria-label', 'Ganzen Stammbaum zeigen');
     button.append(icon('fit'));
@@ -443,6 +443,7 @@ export class OverviewView {
       'aria-label': person.name,
     });
     group.dataset.id = person.id;
+    group.style.setProperty('--avatar-h', String(avatarHue(person.id)));
 
     group.append(svgEl('circle', { class: 'bubble-ring', r: r + 3 }));
     group.append(svgEl('circle', { class: 'bubble', r }));
@@ -465,13 +466,7 @@ export class OverviewView {
         }),
       );
     } else {
-      group.append(
-        svgEl('circle', {
-          class: 'bubble-fill',
-          r,
-          style: `fill: hsl(${avatarHue(person.id)} 42% 86%)`,
-        }),
-      );
+      group.append(svgEl('circle', { class: 'bubble-fill', r }));
       const text = svgEl('text', { class: 'bubble-initials', y: 8 });
       text.textContent = initials(person);
       group.append(text);

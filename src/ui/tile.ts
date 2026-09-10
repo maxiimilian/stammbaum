@@ -7,6 +7,8 @@ export function bubble(person: Person): HTMLElement {
   const wrapper = document.createElement('span');
   wrapper.className = 'bubble-html';
 
+  wrapper.style.setProperty('--avatar-h', String(avatarHue(person.id)));
+
   const url = photoUrl(person);
   if (url) {
     const image = document.createElement('img');
@@ -17,7 +19,6 @@ export function bubble(person: Person): HTMLElement {
   } else {
     const fallback = document.createElement('span');
     fallback.className = 'bubble-initials-html';
-    fallback.style.background = `hsl(${avatarHue(person.id)} 42% 86%)`;
     fallback.textContent = initials(person);
     wrapper.append(fallback);
   }
