@@ -1,0 +1,209 @@
+import { type Diagnostic, type FamilyGraph, type Person, type Union, unionId } from './types';
+
+/**
+ * Parses the mermaid-flavoured family DSL out of a markdown document.
+ *
+ * The DSL lives in ```family fenced blocks; everything around it is ordinary
+ * markdown prose that the parser ignores. Grammar (one statement per line):
+ *
+ *   person <id> "<Name>" [key=value ...]     born= died= photo= maiden= nick= note=
+ *   <a> + <b> [key=value ...]                married= divorced=
+ *   <a> + <b> -> <child>, <child>            children of that union
+ *   <a> -> <child>                           children with an unknown second parent
+ *   %% or # ...                              comment
+ *
+ * Attribute values are bare tokens or "quoted strings". A union may be written
+ * across several lines; the statements merge into one union.
+ */
+export function parseFamily(markdown: string): FamilyGraph {
+  const people = new Map<string, Person>();
+  const unions = new Map<string, Union>();
+  const warnings: Diagnostic[] = [];
+
+  const graph: FamilyGraph = {
+    title: firstHeading(markdown) ?? 'Stammbaum',
+    people,
+    unions: [],
+    warnings,
+  };
+
+  for (const { text, line } of dslLines(markdown)) {
+    const tokens = tokenize(text);
+    if (tokens.length === 0) continue;
+    const warn = (message: string) => warnings.push({ line, message, text });
+
+    if (!tokens[0]!.quoted && tokens[0]!.value === 'person') {
+      readPerson(tokens, people, warn);
+    } else if (
+      tokens.some(
+        (t) => !t.quoted && (t.value === '+' || t.value === '->' || t.value.startsWith('children=')),
+      )
+    ) {
+      readRelation(tokens, unions, warn);
+    } else {
+      warn('unrecognised statement');
+    }
+  }
+
+  // Anyone mentioned only in a relation still gets a bubble, so a half-finished
+  // file renders instead of blowing up.
+  for (const union of unions.values()) {
+    for (const id of [...union.partners, ...union.children]) {
+      if (!people.has(id)) {
+        people.set(id, { id, name: id, stub: true });
+        warnings.push({ line: 0, message: `no "person" declaration for "${id}"`, text: id });
+      }
+    }
+  }
+
+  graph.unions = [...unions.values()];
+  return graph;
+}
+
+interface Token {
+  value: string;
+  quoted: boolean;
+}
+
+/**
+ * Splits a statement into tokens. A token runs to the next space, except that
+ * "quoted sections" may contain spaces — so `note="Wohnt in Lissabon."` stays
+ * one token. `+` and `->` are always separate tokens.
+ */
+function tokenize(text: string): Token[] {
+  const tokens: Token[] = [];
+  for (const [raw] of text.matchAll(/(?:"[^"]*"|[^\s"]+)+/g)) {
+    const fullyQuoted = /^"[^"]*"$/.test(raw);
+    if (fullyQuoted) {
+      tokens.push({ value: raw.slice(1, -1), quoted: true });
+    } else if (raw.includes('"')) {
+      tokens.push({ value: raw.replace(/"/g, ''), quoted: false });
+    } else {
+      // `a+b` and `a->b` are legal without surrounding spaces.
+      for (const piece of raw.split(/(->|\+)/g)) {
+        if (piece !== '') tokens.push({ value: piece, quoted: false });
+      }
+    }
+  }
+  return tokens;
+}
+
+const PERSON_KEYS = new Set(['born', 'died', 'photo', 'maiden', 'nick', 'note']);
+const UNION_KEYS = new Set(['married', 'divorced', 'children']);
+
+function readPerson(tokens: Token[], people: Map<string, Person>, warn: (m: string) => void): void {
+  const id = tokens[1]?.value;
+  if (!id) {
+    warn('person needs an id');
+    return;
+  }
+  const person: Person = people.get(id) ?? { id, name: id };
+  delete person.stub;
+  people.set(id, person);
+
+  let rest = tokens.slice(2);
+  // The display name is the first token, unless it is already a key=value pair.
+  const first = rest[0];
+  if (first && (first.quoted || !first.value.includes('='))) {
+    person.name = first.value;
+    rest = rest.slice(1);
+  }
+  for (const [key, value] of attributes(rest, warn)) {
+    if (!PERSON_KEYS.has(key)) {
+      warn(`unknown person attribute "${key}"`);
+      continue;
+    }
+    person[key as 'born'] = value;
+  }
+}
+
+function readRelation(tokens: Token[], unions: Map<string, Union>, warn: (m: string) => void): void {
+  const arrow = tokens.findIndex((t) => !t.quoted && t.value === '->');
+  const left = arrow === -1 ? tokens : tokens.slice(0, arrow);
+  const right = arrow === -1 ? [] : tokens.slice(arrow + 1);
+
+  const partners: string[] = [left[0]!.value];
+  let rest = left.slice(1);
+  if (rest[0] && !rest[0].quoted && rest[0].value === '+') {
+    const second = rest[1];
+    if (!second) {
+      warn('"+" without a second partner');
+      return;
+    }
+    partners.push(second.value);
+    rest = rest.slice(2);
+  }
+  if (partners.some((p) => p === '' || p.includes('='))) {
+    warn('relation needs plain person ids on the left');
+    return;
+  }
+
+  const id = unionId(partners);
+  const union: Union = unions.get(id) ?? { id, partners, children: [] };
+  unions.set(id, union);
+
+  const children = right
+    .map((t) => t.value)
+    .join(' ')
+    .split(',')
+    .map((c) => c.trim())
+    .filter((c) => c !== '');
+
+  for (const [key, value] of attributes(rest, warn)) {
+    if (!UNION_KEYS.has(key)) {
+      warn(`unknown relation attribute "${key}"`);
+      continue;
+    }
+    if (key === 'children') children.push(...value.split(',').map((c) => c.trim()).filter(Boolean));
+    else union[key as 'married'] = value;
+  }
+
+  for (const child of children) {
+    if (!union.children.includes(child)) union.children.push(child);
+  }
+}
+
+function attributes(tokens: Token[], warn: (m: string) => void): Array<[string, string]> {
+  const pairs: Array<[string, string]> = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]!;
+    const eq = token.quoted ? -1 : token.value.indexOf('=');
+    if (eq <= 0) {
+      // `children=a, b` — a list continued after a space.
+      const previous = pairs[pairs.length - 1];
+      if (previous && previous[1].endsWith(',')) previous[1] += token.value;
+      else warn(`expected key=value, got "${token.value}"`);
+      continue;
+    }
+    const key = token.value.slice(0, eq);
+    let value = token.value.slice(eq + 1);
+    // `note= "..."` — the quoted value landed in the next token.
+    if (value === '' && tokens[i + 1]?.quoted) {
+      value = tokens[i + 1]!.value;
+      i++;
+    }
+    pairs.push([key, value]);
+  }
+  return pairs;
+}
+
+/** Yields the statement lines of every ```family block, with 1-based line numbers. */
+function* dslLines(markdown: string): Generator<{ text: string; line: number }> {
+  const lines = markdown.split(/\r?\n/);
+  let inside = false;
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i]!;
+    const fence = /^\s*```+\s*(\w*)/.exec(raw);
+    if (fence) {
+      inside = inside ? false : fence[1] === 'family';
+      continue;
+    }
+    if (!inside) continue;
+    const text = raw.replace(/%%.*$/, '').replace(/^\s*#.*$/, '').trim();
+    if (text !== '') yield { text, line: i + 1 };
+  }
+}
+
+function firstHeading(markdown: string): string | undefined {
+  return /^#\s+(.+)$/m.exec(markdown)?.[1]?.trim();
+}

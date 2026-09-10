@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="de" data-theme="sims">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="description" content="Stammbaum — wer ist noch mal wer?" />
+    <title>Stammbaum</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <a class="crest" href="#/" title="Zur Übersicht">
+          <span class="crest-mark" aria-hidden="true"></span>
+          <span class="crest-title" id="family-title">Stammbaum</span>
+        </a>
+
+        <div class="search" role="search">
+          <input
+            id="search"
+            type="search"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Wer ist das? …"
+            aria-label="Person suchen"
+            aria-expanded="false"
+          />
+          <ul id="results" class="results" role="listbox" hidden></ul>
+        </div>
+
+        <nav class="tools">
+          <button id="back" type="button" class="chip chip-wide" hidden>← Übersicht</button>
+          <button id="theme" type="button" class="chip chip-wide" title="Design wechseln">🔮 Sims</button>
+        </nav>
+      </header>
+
+      <main id="view" class="view"></main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

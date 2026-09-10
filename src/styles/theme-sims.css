@@ -1,0 +1,96 @@
+/*
+ * "Sims" theme — blue sky, plumbob green, chunky glossy buttons.
+ * Only custom properties plus a couple of decorative extras; the structure
+ * lives in base.css. Copy this file to make a new look.
+ */
+
+:root[data-theme='sims'] {
+  --font: Quicksand, Comfortaa, 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+  --font-display: Quicksand, Comfortaa, 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+
+  --ink: #10394f;
+  --muted: #4a7c96;
+  --halo: rgba(255, 255, 255, 0.9);
+
+  --bg-color: #8fd6f6;
+  --bg-gradient: linear-gradient(180deg, #5cb9e8 0%, #8fd6f6 38%, #c4ecfd 100%);
+  --bg-layer:
+    radial-gradient(26% 16% at 16% 16%, rgba(255, 255, 255, 0.75), transparent 72%),
+    radial-gradient(20% 12% at 74% 10%, rgba(255, 255, 255, 0.6), transparent 72%),
+    radial-gradient(30% 18% at 52% 78%, rgba(255, 255, 255, 0.45), transparent 74%);
+
+  --panel: rgba(255, 255, 255, 0.94);
+  --panel-border: 3px solid #ffffff;
+  --shadow-panel: 0 10px 0 rgba(23, 106, 150, 0.18), 0 18px 34px rgba(14, 74, 106, 0.24);
+  --hover: rgba(90, 200, 255, 0.18);
+  --radius: 16px;
+  --radius-card: 26px;
+  --radius-pill: 999px;
+
+  --bar-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(226, 246, 255, 0.9));
+  --bar-border: 3px solid #2e9bd6;
+  --bar-shadow: 0 6px 18px rgba(16, 84, 122, 0.25);
+
+  --field-bg: #ffffff;
+  --field-border: 2px solid #9fd8f2;
+
+  --chip-bg: linear-gradient(180deg, #9bee55 0%, #62c827 55%, #4aac16 100%);
+  --chip-ink: #113d05;
+  --chip-border: 2px solid #35800e;
+  --chip-shadow: 0 4px 0 #2c6c0c, 0 8px 14px rgba(20, 80, 20, 0.3);
+
+  --crest-mark: linear-gradient(180deg, #b6ff6a, #4fd21a);
+  --crest-shape: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  --crest-radius: 0;
+  --crest-glow: drop-shadow(0 0 6px rgba(120, 255, 90, 0.75));
+
+  --bubble-bg: #ffffff;
+  --bubble-border: 4px solid #ffffff;
+  --bubble-border-deceased: 4px solid #cfe3ee;
+  --shadow-bubble: 0 6px 0 rgba(23, 106, 150, 0.2), 0 10px 20px rgba(14, 74, 106, 0.28);
+  --bubble-shadow: drop-shadow(0 5px 6px rgba(14, 74, 106, 0.35));
+  --initials-ink: #143f56;
+
+  --ring: #ffffff;
+  --ring-active: #5fd726;
+  --ring-deceased: #cfe3ee;
+
+  --link: #2079ad;
+  --link-divorced: #d2557a;
+  --link-width: 3px;
+
+  --badge-bg: #ffffff;
+  --badge-ring: #2079ad;
+
+  --pill-bg: #e4fbcf;
+  --pill-ink: #2f6a10;
+  --pill-border: 2px solid #a9e07a;
+  --pill-bg-divorced: #ffe3ec;
+  --pill-ink-divorced: #972a4c;
+
+  --plumbob-display: block;
+  --plumbob-fill: #5fd726;
+  --plumbob-glow: drop-shadow(0 0 6px rgba(95, 215, 38, 0.8));
+
+  --label-chip: rgba(255, 255, 255, 0.78);
+  --warn: #f0a933;
+}
+
+/* A little gloss on the big bubbles, straight out of the game's UI. */
+:root[data-theme='sims'] .bubble-html::after {
+  content: '';
+  position: absolute;
+  inset: 6% 12% 55% 12%;
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+
+:root[data-theme='sims'] .focus-card {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(224, 246, 255, 0.94));
+}
+
+:root[data-theme='sims'] .tier-label {
+  color: #1c6a92;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
+}
