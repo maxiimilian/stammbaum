@@ -1,9 +1,10 @@
-import familyMarkdown from '../data/family.md?raw';
+// `@family` is data/ when the private family is there, sample/ otherwise — see vite.config.ts.
+import familyMarkdown from '@family/family.md?raw';
 import { parseFamily } from './parser/parse';
 import type { FamilyGraph, Person } from './parser/types';
 
 // Bundled at build time so the offline single-file build needs no network.
-const photos = import.meta.glob('../data/photos/*.{jpg,jpeg,png,webp,svg}', {
+const photos = import.meta.glob('@family/photos/*.{jpg,jpeg,png,webp,svg}', {
   eager: true,
   query: '?url',
   import: 'default',

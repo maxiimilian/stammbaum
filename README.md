@@ -8,8 +8,11 @@ enhancement. Two screens, one markdown file:
 - **Person** — one person with their first-degree relatives only: parents on
   top, partners beside (below, on a phone), children underneath.
 
-The data lives in [`data/family.md`](data/family.md) and is written in a
-mermaid-flavoured DSL, so the tree is edited like text and reviewed like code.
+The family lives in `data/family.md`, written in a mermaid-flavoured DSL, so the
+tree is edited like text and reviewed like code. That folder is private and
+never part of this repository — see [Keeping the family
+private](#keeping-the-family-private); a made-up family in
+[`sample/`](sample/family.md) stands in until it exists.
 
 ## Gestures
 
@@ -38,6 +41,27 @@ npm run build        # dist/ — a normal static site
 npm run build:single # dist/index.html — ONE self-contained file, works offline
 ```
 
+## Keeping the family private
+
+This repository is public, so it only carries the made-up Bauer family in
+`sample/`. Your own family goes into `data/` — ignored here, and a git
+repository of its own:
+
+```sh
+mkdir -p data/photos && cp sample/family.md data/
+cd data && git init && git add . && git commit -m "Our family"
+# optional, a private remote:
+git remote add origin git@github.com:<you>/<family>.git && git push -u origin main
+```
+
+`npm run dev` and both builds use `data/` whenever `data/family.md` exists and
+fall back to `sample/` otherwise. `FAMILY_DIR=<folder>` points them anywhere
+else — `FAMILY_DIR=sample npm run dev` shows the sample even with your family in
+place. The tests always run against the sample.
+
+A build made from `data/` contains every name and photo: mail the file around,
+but never publish `dist/`.
+
 `build:single` inlines the script, the styles and every photo as `data:` URIs.
 The result is a single HTML file you can mail to relatives or open from a USB
 stick with no server and no network — which is usually what a family gathering
@@ -46,8 +70,8 @@ in a house with bad reception actually needs.
 ## Writing the family file
 
 Everything the app shows comes from the ```` ```family ```` block(s) in
-`data/family.md`. Prose outside those blocks is ignored, so document the family
-in the same file.
+`data/family.md` — or [`sample/family.md`](sample/family.md) until you have one.
+Prose outside those blocks is ignored, so document the family in the same file.
 
 ```family
 person heinrich  "Heinrich Bauer"  born=1931-04-02 died=2011-08-17 photo=heinrich.jpg
@@ -101,8 +125,8 @@ Notes:
   relatives nor one partnership away from one get no caption.
 - Statements about one partnership may be split across lines and written in
   either partner order; they merge.
-- Photos are file names inside [`data/photos/`](data/photos). Anyone without a
-  photo gets an initials bubble in a colour derived from their id.
+- Photos are file names inside the `photos/` folder next to `family.md`. Anyone
+  without a photo gets an initials bubble in a colour derived from their id.
 - Undeclared ids still render, and the app shows a dismissible list of hints
   about the file — a half-finished tree never breaks the page.
 
@@ -156,8 +180,9 @@ component classes, because utility strings inside generated SVG would be
 unreadable.
 
 ```
-data/family.md          the family, and the format documented in prose
-data/photos/            photos, inlined by the offline build
+data/                   your family — ignored here, a private repo of its own
+sample/family.md        the made-up sample family, and the format in prose
+sample/photos/          its placeholder portraits
 src/parser/             markdown → { people, unions, warnings }
 src/family.ts           derived lookups: parents, partnerships, broods, search
 src/layout/layout.ts    generations, tidy horizontal placement, refinement sweep

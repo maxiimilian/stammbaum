@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { parseFamily } from '../src/parser/parse';
 import { layoutFamily, METRICS } from '../src/layout/layout';
 
-const sample = readFileSync(new URL('../data/family.md', import.meta.url), 'utf8');
+const sample = readFileSync(new URL('../sample/family.md', import.meta.url), 'utf8');
 const graph = parseFamily(sample);
 const layout = layoutFamily(graph);
 
