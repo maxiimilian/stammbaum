@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { parseFamily } from '../src/parser/parse';
 import { Family } from '../src/family';
 
-const family = new Family(parseFamily(readFileSync(new URL('../data/family.md', import.meta.url), 'utf8')));
+const family = new Family(parseFamily(readFileSync(new URL('../sample/family.md', import.meta.url), 'utf8')));
 
 describe('Family', () => {
   it('lists both parents', () => {

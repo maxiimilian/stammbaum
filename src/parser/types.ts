@@ -5,7 +5,7 @@ export interface Person {
   /** Free-form, but ISO-ish (`1956`, `1956-04`, `1956-04-02`) renders best. */
   born?: string;
   died?: string;
-  /** File name inside `data/photos/`, e.g. `heinrich.jpg`. */
+  /** File name inside the `photos/` folder next to `family.md`, e.g. `heinrich.jpg`. */
   photo?: string;
   /** Maiden name, shown in the detail view as "geb. Vogt". */
   maiden?: string;

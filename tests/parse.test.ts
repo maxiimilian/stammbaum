@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { parseFamily } from '../src/parser/parse';
 import { unionEnd, unionId, unionStart, unionStatus, type Union } from '../src/parser/types';
 
-const sample = readFileSync(new URL('../data/family.md', import.meta.url), 'utf8');
+const sample = readFileSync(new URL('../sample/family.md', import.meta.url), 'utf8');
 
 describe('parseFamily', () => {
   it('reads the title from the first markdown heading', () => {
