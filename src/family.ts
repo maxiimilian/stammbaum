@@ -35,8 +35,18 @@ export class Family {
     }));
   }
 
+  /** The person relations are named from, when the file has a `me` line. */
+  me(): Person | undefined {
+    return this.graph.me === undefined ? undefined : this.person(this.graph.me);
+  }
+
+  /** The partnership someone was born into. */
+  parentUnion(id: string): Union | undefined {
+    return this.unionsByChild.get(id)?.[0];
+  }
+
   parents(id: string): Person[] {
-    const union = this.unionsByChild.get(id)?.[0];
+    const union = this.parentUnion(id);
     return union ? union.partners.map((p) => this.person(p)).filter(isPerson) : [];
   }
 

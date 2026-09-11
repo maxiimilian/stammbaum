@@ -1,0 +1,122 @@
+import { describe, expect, it } from 'vitest';
+import { parseFamily } from '../src/parser/parse';
+import { Family } from '../src/family';
+import { relation } from '../src/kinship';
+
+const family = new Family(
+  parseFamily(`
+\`\`\`family
+me max
+person uropa "Uropa" sex=m
+person opa "Opa" sex=m
+person oma "Oma" sex=f
+uropa -> opa
+opa + oma -> vater, tante
+
+person vater "Vater" sex=m
+person mutter "Mutter" sex=f
+person neue "Neue" sex=f
+vater + mutter -> max, bruder
+vater + neue together=2010 -> halb
+
+person max "Max" sex=m
+person frau "Frau" sex=f
+max + frau married=2020
+person sv "Schwiegervater" sex=m
+sv -> frau
+
+person bruder "Bruder" sex=m
+person halb "Halb" sex=f
+person schwaegerin "Schwägerin" sex=f
+bruder + schwaegerin -> nichte
+person nichte "Nichte" sex=f
+
+person tante "Tante" sex=f
+person onkel "Onkel" sex=m
+tante + onkel -> cousine
+person cousine "Cousine" sex=f
+person ex "Ex" sex=m
+person cousinmann "Mann" sex=m
+cousine + ex divorced=?
+cousine + cousinmann -> kim
+person kim "Kim Keller"
+person robin "Robin" sex=m
+kim + robin together=?
+
+person fremd "Fremd" sex=m
+\`\`\`
+`),
+);
+
+const as = (from: string, to: string) => relation(family, from, to);
+
+describe('relation', () => {
+  it('names direct ancestors and descendants', () => {
+    expect(as('max', 'vater')).toBe('Vater');
+    expect(as('max', 'mutter')).toBe('Mutter');
+    expect(as('max', 'oma')).toBe('Großmutter');
+    expect(as('max', 'uropa')).toBe('Urgroßvater');
+    expect(as('uropa', 'max')).toBe('Urenkel');
+    expect(as('vater', 'bruder')).toBe('Sohn');
+  });
+
+  it('tells full siblings from half siblings', () => {
+    expect(as('max', 'bruder')).toBe('Bruder');
+    expect(as('max', 'halb')).toBe('Halbschwester');
+  });
+
+  it('names aunts, uncles, nieces and cousins in both directions', () => {
+    expect(as('max', 'tante')).toBe('Tante');
+    expect(as('max', 'nichte')).toBe('Nichte');
+    expect(as('nichte', 'max')).toBe('Onkel');
+    expect(as('max', 'cousine')).toBe('Cousine');
+    expect(as('cousine', 'max')).toBe('Cousin');
+    expect(as('kim', 'max')).toBe('Großcousin');
+    expect(as('kim', 'nichte')).toBe('Cousine 2. Grades');
+  });
+
+  it('names both forms when the sex is not given', () => {
+    expect(as('max', 'kim')).toBe('Großcousin(e)');
+    expect(as('nichte', 'kim')).toBe('Cousin(e) 2. Grades');
+  });
+
+  it('names partners of blood relatives', () => {
+    expect(as('max', 'frau')).toBe('Ehefrau');
+    expect(as('max', 'neue')).toBe('Stiefmutter');
+    expect(as('max', 'schwaegerin')).toBe('Schwägerin');
+    expect(as('max', 'onkel')).toBe('Onkel');
+    expect(as('max', 'cousinmann')).toBe('Mann der Cousine');
+    expect(as('max', 'ex')).toBe('Ex-Mann der Cousine');
+    expect(as('max', 'robin')).toBe('Partner von Kim');
+  });
+
+  it('names blood relatives of the partner', () => {
+    expect(as('max', 'sv')).toBe('Schwiegervater');
+    expect(as('frau', 'vater')).toBe('Schwiegervater');
+    expect(as('frau', 'bruder')).toBe('Schwager');
+    expect(as('frau', 'tante')).toBe('Tante des Mannes');
+  });
+
+  it('calls the reference person themselves and leaves strangers blank', () => {
+    expect(as('max', 'max')).toBe('Ich');
+    expect(as('max', 'fremd')).toBeUndefined();
+  });
+});
+
+describe('me and sex in the file', () => {
+  it('reads the me line and m, f and w', () => {
+    const graph = parseFamily('```family\nme a\nperson a "A" sex=m\nperson b "B" sex=w\nperson c "C" sex=f\n```');
+    expect(graph.me).toBe('a');
+    expect(['a', 'b', 'c'].map((id) => graph.people.get(id)?.sex)).toEqual(['m', 'f', 'f']);
+    expect(graph.warnings).toEqual([]);
+  });
+
+  it('warns about an unknown me and an unknown sex', () => {
+    const graph = parseFamily('```family\nme ghost\nperson a "A" sex=x\n```');
+    expect(graph.me).toBeUndefined();
+    expect(graph.warnings.map((w) => w.message)).toEqual([
+      'sex must be m or f, got "x"',
+      '"me" names unknown person "ghost"',
+    ]);
+  });
+});

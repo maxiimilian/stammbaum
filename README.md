@@ -70,9 +70,10 @@ nina + david together=2012 separated=2018
 | `<a> + <b> key=value …` | A partnership. |
 | `<a> + <b> -> <child>, <child>` | Children of that partnership. |
 | `<a> -> <child>` | Children whose second parent is unknown. |
+| `me <id>` | Whose point of view relations are named from. |
 | `%% …` | Comment. |
 
-**Person keys** — `born`, `died`, `photo`, `maiden`, `nick`, `note`.
+**Person keys** — `born`, `died`, `photo`, `maiden`, `nick`, `note`, `sex`.
 **Partnership keys** — `married`, `divorced`, `together`, `separated`,
 `children`.
 
@@ -93,6 +94,11 @@ Notes:
   them short, lowercase and stable.
 - `nick` wins over the first name in bubbles: the tree says *Oma*, the detail
   view says *Elisabeth Bauer*.
+- With a `me <id>` line, every person in the detail view is captioned with what
+  they are to that person: *Tante*, *Cousine 2. Grades*, *Schwager*, *Mann der
+  Cousine*. `sex=m` or `sex=f` (`w` works too) picks the gendered word; without
+  it the caption names both (*Onkel/Tante*). People who are neither blood
+  relatives nor one partnership away from one get no caption.
 - Statements about one partnership may be split across lines and written in
   either partner order; they merge.
 - Photos are file names inside [`data/photos/`](data/photos). Anyone without a

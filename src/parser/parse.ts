@@ -1,4 +1,4 @@
-import { type Diagnostic, type FamilyGraph, type Person, type Union, unionId } from './types';
+import { type Diagnostic, type FamilyGraph, type Person, type Sex, type Union, unionId } from './types';
 
 /**
  * Parses the mermaid-flavoured family DSL out of a markdown document.
@@ -6,10 +6,11 @@ import { type Diagnostic, type FamilyGraph, type Person, type Union, unionId } f
  * The DSL lives in ```family fenced blocks; everything around it is ordinary
  * markdown prose that the parser ignores. Grammar (one statement per line):
  *
- *   person <id> "<Name>" [key=value ...]     born= died= photo= maiden= nick= note=
+ *   person <id> "<Name>" [key=value ...]     born= died= photo= maiden= nick= note= sex=
  *   <a> + <b> [key=value ...]                married= divorced= together= separated=
  *   <a> + <b> -> <child>, <child>            children of that union
  *   <a> -> <child>                           children with an unknown second parent
+ *   me <id>                                  whose point of view relations are named from
  *   %% or # ...                              comment
  *
  * Attribute values are bare tokens or "quoted strings". A union may be written
@@ -26,6 +27,7 @@ export function parseFamily(markdown: string): FamilyGraph {
     unions: [],
     warnings,
   };
+  let me: { id: string; line: number; text: string } | undefined;
 
   for (const { text, line } of dslLines(markdown)) {
     const tokens = tokenize(text);
@@ -40,6 +42,9 @@ export function parseFamily(markdown: string): FamilyGraph {
       )
     ) {
       readRelation(tokens, unions, warn);
+    } else if (!tokens[0]!.quoted && tokens[0]!.value === 'me') {
+      if (tokens.length !== 2) warn('"me" needs exactly one person id');
+      else me = { id: tokens[1]!.value, line, text };
     } else {
       warn('unrecognised statement');
     }
@@ -55,6 +60,9 @@ export function parseFamily(markdown: string): FamilyGraph {
       }
     }
   }
+
+  if (me && people.has(me.id)) graph.me = me.id;
+  else if (me) warnings.push({ line: me.line, message: `"me" names unknown person "${me.id}"`, text: me.text });
 
   graph.unions = [...unions.values()];
   return graph;
@@ -88,7 +96,13 @@ function tokenize(text: string): Token[] {
   return tokens;
 }
 
-const PERSON_KEYS = new Set(['born', 'died', 'photo', 'maiden', 'nick', 'note']);
+const PERSON_KEYS = new Set(['born', 'died', 'photo', 'maiden', 'nick', 'note', 'sex']);
+/** `w` for weiblich, since the people writing the file speak German. */
+const SEXES = new Map<string, Sex>([
+  ['m', 'm'],
+  ['f', 'f'],
+  ['w', 'f'],
+]);
 const UNION_KEYS = new Set(['married', 'divorced', 'together', 'separated', 'children']);
 
 function readPerson(tokens: Token[], people: Map<string, Person>, warn: (m: string) => void): void {
@@ -111,6 +125,12 @@ function readPerson(tokens: Token[], people: Map<string, Person>, warn: (m: stri
   for (const [key, value] of attributes(rest, warn)) {
     if (!PERSON_KEYS.has(key)) {
       warn(`unknown person attribute "${key}"`);
+      continue;
+    }
+    if (key === 'sex') {
+      const sex = SEXES.get(value.toLowerCase());
+      if (sex) person.sex = sex;
+      else warn(`sex must be m or f, got "${value}"`);
       continue;
     }
     person[key as 'born'] = value;

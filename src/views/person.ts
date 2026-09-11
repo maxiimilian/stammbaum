@@ -1,4 +1,5 @@
 import type { Family } from '../family';
+import { relation } from '../kinship';
 import {
   unionEnd,
   unionStart,
@@ -29,6 +30,9 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
   const parents = family.parents(person.id);
   const partnerships = family.partnerships(person.id);
   const broods = family.broods(person.id);
+  // Everyone is captioned with what they are to the file's `me`.
+  const me = family.me();
+  const kin = (other: Person) => (me ? relation(family, me.id, other.id) : undefined);
 
   const parentTiles: HTMLElement[] = [];
   if (parents.length > 0) {
@@ -36,7 +40,7 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
     const row = document.createElement('div');
     row.className = 'row';
     for (const parent of parents) {
-      const element = tile(parent);
+      const element = tile(parent, kin(parent));
       parentTiles.push(element);
       row.append(element);
     }
@@ -52,7 +56,7 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
   left.className = 'partner-slot slot-left';
   const right = document.createElement('div');
   right.className = 'partner-slot slot-right';
-  const card = focusCard(person);
+  const card = focusCard(person, kin(person));
   focusTier.append(left, card, right);
   root.append(focusTier);
 
@@ -63,7 +67,7 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
     element.className = 'partner';
     // The connector is drawn later, from the geometry — it reads the state here.
     element.dataset.status = unionStatus(union);
-    element.append(tile(partner), relationPill(union));
+    element.append(tile(partner, kin(partner)), relationPill(union));
     partnerTiles.set(union.id, element);
     (index === 0 && partnerships.length > 1 ? left : right).append(element);
   });
@@ -89,7 +93,7 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
       const row = document.createElement('div');
       row.className = 'row';
       const tiles = brood.children.map((child) => {
-        const element = tile(child);
+        const element = tile(child, kin(child));
         row.append(element);
         return element as HTMLElement;
       });
@@ -124,7 +128,7 @@ function section(className: string, label: string): HTMLElement {
   return element;
 }
 
-function focusCard(person: Person): HTMLElement {
+function focusCard(person: Person, relation: string | undefined): HTMLElement {
   const card = document.createElement('div');
   card.className = `focus-card card bg-base-100 shadow-sm${person.died ? ' is-deceased' : ''}`;
   card.append(bubble(person));
@@ -133,6 +137,7 @@ function focusCard(person: Person): HTMLElement {
   name.className = 'focus-name';
   name.textContent = person.name;
   card.append(name);
+  if (relation) card.append(line('focus-relation', relation));
 
   if (person.nick && person.nick !== shortName(person)) {
     card.append(line('focus-nick', `„${person.nick}“`));

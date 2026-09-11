@@ -384,6 +384,15 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .tile-relation {
+    margin-top: 2px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--color-primary);
+    text-align: center;
+  }
+
   .tile.is-deceased .bubble-html img,
   .focus-card.is-deceased .bubble-html img {
     filter: grayscale(0.5);
@@ -410,6 +419,13 @@
     font-size: 1.375rem;
     font-weight: 600;
     line-height: 1.2;
+  }
+
+  .focus-relation {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-primary);
   }
 
   .focus-nick,

@@ -25,8 +25,8 @@ export function bubble(person: Person): HTMLElement {
   return wrapper;
 }
 
-/** A clickable person: bubble, name, years. */
-export function tile(person: Person): HTMLAnchorElement {
+/** A clickable person: bubble, name, years — and how they are related, if known. */
+export function tile(person: Person, relation?: string): HTMLAnchorElement {
   const link = document.createElement('a');
   link.className = `tile${person.died ? ' is-deceased' : ''}`;
   link.href = `#/p/${encodeURIComponent(person.id)}`;
@@ -50,6 +50,13 @@ export function tile(person: Person): HTMLAnchorElement {
     const element = document.createElement('span');
     element.className = 'tile-years';
     element.textContent = years;
+    link.append(element);
+  }
+
+  if (relation) {
+    const element = document.createElement('span');
+    element.className = 'tile-relation';
+    element.textContent = relation;
     link.append(element);
   }
   return link;

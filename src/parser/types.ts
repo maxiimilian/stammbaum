@@ -9,12 +9,16 @@ export interface Person {
   photo?: string;
   /** Maiden name, shown in the detail view as "geb. Vogt". */
   maiden?: string;
+  /** Only used to pick the word for a relation: Onkel or Tante. */
+  sex?: Sex;
   /** Nickname — what the family actually calls them. */
   nick?: string;
   note?: string;
   /** True when the person was only referenced by a relation, never declared. */
   stub?: boolean;
 }
+
+export type Sex = 'm' | 'f';
 
 /** A partnership. Divorce and remarriage are modelled as separate unions. */
 export interface Union {
@@ -73,6 +77,8 @@ export interface Diagnostic {
 
 export interface FamilyGraph {
   title: string;
+  /** Whose point of view relations are named from — the `me` line. */
+  me?: string;
   people: Map<string, Person>;
   unions: Union[];
   warnings: Diagnostic[];
