@@ -41,6 +41,11 @@ npm run build        # dist/ — a normal static site
 npm run build:single # dist/index.html — ONE self-contained file, works offline
 ```
 
+To host it, `docker compose up -d --build` runs `build:single` in a Node build
+stage and serves the resulting `index.html` from nginx on port 8080 (`PORT=…`
+to change it); run it again after editing the family. A build from `data/` puts
+the whole family online, so keep that server private.
+
 ## Keeping the family private
 
 This repository is public, so it only carries the made-up Bauer family in

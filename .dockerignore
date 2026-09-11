@@ -1,0 +1,5 @@
+node_modules
+dist
+# Only this repository's history; data/.git stays in, for the family commit.
+.git
+**/.DS_Store

@@ -1,0 +1,12 @@
+# `docker compose up -d --build` builds the single-file app and serves it on
+# :8080. Run it again after editing the family.
+services:
+  web:
+    build:
+      context: .
+      args:
+        # Leave unset for data/ (or sample/ without it); `FAMILY_DIR=sample` for the sample.
+        FAMILY_DIR: ${FAMILY_DIR:-}
+    ports:
+      - "${PORT:-8080}:80"
+    restart: unless-stopped
