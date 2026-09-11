@@ -114,6 +114,14 @@
     pointer-events: none;
   }
 
+  .build-stamp {
+    font-size: 10px;
+    text-anchor: middle;
+    fill: color-mix(in oklab, var(--color-base-content) 40%, transparent);
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+  }
+
   .node {
     cursor: pointer;
   }

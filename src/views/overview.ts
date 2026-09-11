@@ -1,7 +1,7 @@
 import type { Family } from '../family';
 import { layoutFamily, METRICS, type Layout, type NodeBox, type UnionEdge } from '../layout/layout';
 import { photoUrl } from '../data';
-import { familyName, initials, lifespan, shortName, avatarHue, year } from '../ui/format';
+import { familyName, initials, lifespan, shortName, avatarHue, year, buildStamp } from '../ui/format';
 import { icon, weddingRings, RINGS } from '../ui/icons';
 import { unionEnd, unionStart, unionStatus, type Person } from '../parser/types';
 
@@ -12,6 +12,8 @@ const MAX_SCALE = 2.5;
 const READABLE_SCALE = 0.5;
 const DOUBLE_TAP_MS = 320;
 const TAP_SLOP = 10;
+/** Room under the lowest row for the build stamp. */
+const STAMP_SPACE = 32;
 
 interface View {
   k: number;
@@ -29,6 +31,8 @@ export class OverviewView {
   private readonly svg: SVGSVGElement;
   private readonly viewport: SVGGElement;
   private readonly layout: Layout;
+  /** The tree plus the build stamp beneath it. */
+  private readonly height: number;
   private readonly nodeElements = new Map<string, SVGGElement>();
   private view: View = { k: 1, x: 0, y: 0 };
   private positioned = false;
@@ -41,6 +45,7 @@ export class OverviewView {
     private readonly onSelect: (id: string) => void,
   ) {
     this.layout = layoutFamily(family.graph);
+    this.height = this.layout.height + STAMP_SPACE;
     this.element = document.createElement('div');
     this.element.className = 'overview';
 
@@ -50,7 +55,7 @@ export class OverviewView {
     this.svg.append(this.viewport);
     this.element.append(this.svg);
 
-    this.viewport.append(this.drawLinks(), this.drawNodes());
+    this.viewport.append(this.drawLinks(), this.drawNodes(), this.drawStamp());
     this.bindGestures();
     this.element.append(this.buildFab());
   }
@@ -66,14 +71,14 @@ export class OverviewView {
     const box = this.svg.getBoundingClientRect();
     if (box.width === 0) return;
     const k = clamp(
-      Math.min(box.width / this.layout.width, box.height / this.layout.height),
+      Math.min(box.width / this.layout.width, box.height / this.height),
       READABLE_SCALE,
       1,
     );
     this.set({
       k,
       x: (box.width - this.layout.width * k) / 2,
-      y: Math.min((box.height - this.layout.height * k) / 2, 24),
+      y: Math.min((box.height - this.height * k) / 2, 24),
     });
     this.positioned = true;
   }
@@ -83,14 +88,14 @@ export class OverviewView {
     const box = this.svg.getBoundingClientRect();
     if (box.width === 0) return;
     const k = clamp(
-      Math.min(box.width / (this.layout.width + 40), box.height / (this.layout.height + 40)),
+      Math.min(box.width / (this.layout.width + 40), box.height / (this.height + 40)),
       MIN_SCALE,
       1.1,
     );
     const target = {
       k,
       x: (box.width - this.layout.width * k) / 2,
-      y: (box.height - this.layout.height * k) / 2,
+      y: (box.height - this.height * k) / 2,
     };
     this.positioned = true;
     if (animate) this.animateTo(target);
@@ -131,7 +136,7 @@ export class OverviewView {
     if (box.width === 0) return view;
     const k = clamp(view.k, MIN_SCALE, MAX_SCALE);
     const width = this.layout.width * k;
-    const height = this.layout.height * k;
+    const height = this.height * k;
     return {
       k,
       x: clamp(view.x, box.width * 0.25 - width, box.width * 0.75),
@@ -366,6 +371,17 @@ export class OverviewView {
     button.append(icon('fit'));
     button.addEventListener('click', () => this.fit());
     return button;
+  }
+
+  /** When, and from which family commit, this page was built — to spot a stale copy. */
+  private drawStamp(): SVGTextElement {
+    const text = svgEl('text', {
+      class: 'build-stamp',
+      x: this.layout.width / 2,
+      y: this.layout.height + STAMP_SPACE - 10,
+    });
+    text.textContent = buildStamp(__BUILD_TIME__, __FAMILY_COMMIT__);
+    return text;
   }
 
   private drawLinks(): SVGGElement {

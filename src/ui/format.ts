@@ -51,6 +51,12 @@ export function longDate(date: string | undefined): string {
   return d ? `${Number(d)}. ${month} ${y}` : `${month} ${y}`;
 }
 
+/** `Erstellt 11.09.2026, 14:05 · Daten 5dc071f` — when, and from what, this page was built. */
+export function buildStamp(builtAt: string, commit: string): string {
+  const when = new Date(builtAt).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
+  return commit ? `Erstellt ${when} · Daten ${commit}` : `Erstellt ${when}`;
+}
+
 /** A stable pastel per person, used when there is no photo. */
 export function avatarHue(id: string): number {
   let hash = 0;
