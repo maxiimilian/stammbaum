@@ -86,9 +86,20 @@
     stroke-linejoin: round;
   }
 
-  .link-divorced {
-    stroke: color-mix(in oklab, var(--color-error) 60%, transparent);
-    stroke-dasharray: 6 7;
+  /*
+   * Partnerships are drawn in the same grey as every other line. All that
+   * differs is the line itself — solid while it lasts, dotted once it ended —
+   * and the rings, which only a marriage gets.
+   */
+  .link-divorced,
+  .link-separated {
+    stroke-dasharray: 1 5;
+  }
+
+  .union-ring {
+    fill: none;
+    stroke: color-mix(in oklab, var(--color-base-content) 22%, transparent);
+    stroke-width: 2px;
   }
 
   .union-label {
@@ -203,9 +214,9 @@
     stroke-linejoin: round;
   }
 
-  .wire-divorced {
-    stroke: color-mix(in oklab, var(--color-error) 60%, transparent);
-    stroke-dasharray: 6 7;
+  .wire-divorced,
+  .wire-separated {
+    stroke-dasharray: 1 5;
   }
 
   .tier {

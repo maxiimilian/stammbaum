@@ -58,6 +58,10 @@ heinrich + elisabeth married=1956-05-19 -> klaus, brigitte
 %% Divorced, then married again: two partnerships, one line each.
 klaus + sabine married=1984 divorced=1996 -> nina, jonas
 klaus + carmen married=2001 -> luca
+
+%% Not married, just a couple — and one that ended without a divorce.
+brigitte + tobias together=2015 -> emil
+nina + david together=2012 separated=2018
 ```
 
 | Statement | Meaning |
@@ -69,10 +73,20 @@ klaus + carmen married=2001 -> luca
 | `%% …` | Comment. |
 
 **Person keys** — `born`, `died`, `photo`, `maiden`, `nick`, `note`.
-**Partnership keys** — `married`, `divorced`, `children`.
+**Partnership keys** — `married`, `divorced`, `together`, `separated`,
+`children`.
 
 Notes:
 
+- A partnership has a start — `married` or `together` — and an optional end —
+  `divorced` or `separated`. That gives four states: *verheiratet*, *zusammen*,
+  *geschieden*, *getrennt*. A bare `a + b` with no keys counts as a marriage.
+  In the tree a marriage carries the two rings its children hang from, an
+  unmarried couple gets the plain line, and a partnership that ended is dotted.
+- Use `together` for a couple who are not married.
+- A date you do not know or do not care to publish can be written as `?` or
+  `true` — `a + b together=?`, `a + b divorced=true`. The partnership is drawn
+  as that kind of partnership, just without a year next to it.
 - Dates are free text, but `1956`, `1956-04` and `1956-04-02` are formatted
   nicely (`* 2. April 1956`); anything else is printed as written.
 - Ids are the deep-link handles — `#/p/klaus` opens Klaus directly — so keep

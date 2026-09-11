@@ -2,8 +2,8 @@ import type { Family } from '../family';
 import { layoutFamily, METRICS, type Layout, type NodeBox, type UnionEdge } from '../layout/layout';
 import { photoUrl } from '../data';
 import { familyName, initials, lifespan, shortName, avatarHue, year } from '../ui/format';
-import { icon } from '../ui/icons';
-import type { Person } from '../parser/types';
+import { icon, weddingRings, RINGS } from '../ui/icons';
+import { unionEnd, unionStart, unionStatus, type Person } from '../parser/types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const MIN_SCALE = 0.12;
@@ -378,21 +378,30 @@ export class OverviewView {
         .filter((n): n is NodeBox => !!n)
         .sort((a, b) => a.x - b.x);
 
-      const state = union.divorced ? 'divorced' : 'married';
+      const state = unionStatus(union);
       const [left, right] = partners;
+      // Only a real couple gets the rings; a lone parent has no line to hang on.
+      const rings = state === 'married' && !!left && !!right;
       if (left && right) {
-        group.append(
-          svgEl('line', {
-            class: `link link-${state}`,
-            x1: left.x + METRICS.bubbleRadius,
-            y1: left.y,
-            x2: right.x - METRICS.bubbleRadius,
-            y2: right.y,
-          }),
-        );
+        const cls = `link link-${state}`;
+        const x1 = left.x + METRICS.bubbleRadius;
+        const x2 = right.x - METRICS.bubbleRadius;
+        if (rings) {
+          group.append(
+            svgEl('line', { class: cls, x1, y1: left.y, x2: union.x - RINGS.clearance, y2: union.y }),
+            svgEl('line', { class: cls, x1: union.x + RINGS.clearance, y1: union.y, x2, y2: right.y }),
+            weddingRings(union.x, union.y),
+          );
+        } else {
+          group.append(svgEl('line', { class: cls, x1, y1: left.y, x2, y2: right.y }));
+        }
         const label = unionLabel(union);
         if (label) {
-          const text = svgEl('text', { class: 'union-label', x: union.x, y: union.y - 8 });
+          const text = svgEl('text', {
+            class: 'union-label',
+            x: union.x,
+            y: union.y - (rings ? RINGS.radius + 8 : 8),
+          });
           text.textContent = label;
           group.append(text);
         }
@@ -409,7 +418,9 @@ export class OverviewView {
         svgEl('path', {
           class: 'link link-descent',
           d: [
-            `M ${union.x} ${union.y + (partners.length > 1 ? 6 : METRICS.bubbleRadius)}`,
+            // The children hang off the rings when there are any, off the
+            // partner line otherwise.
+            `M ${union.x} ${union.y + (rings ? RINGS.radius : partners.length > 1 ? 6 : METRICS.bubbleRadius)}`,
             `L ${union.x} ${busY}`,
             `M ${Math.min(...xs, union.x)} ${busY}`,
             `L ${Math.max(...xs, union.x)} ${busY}`,
@@ -493,10 +504,10 @@ export class OverviewView {
   }
 }
 
-/** `1956` for a marriage, `1984–1996` once it ended. */
+/** `1956` for a partnership, `1984–1996` once it ended. */
 function unionLabel(union: UnionEdge): string {
-  const from = year(union.married);
-  const to = year(union.divorced);
+  const from = year(unionStart(union));
+  const to = year(unionEnd(union));
   if (from && to) return `${from}–${to}`;
   return to ? `–${to}` : from;
 }

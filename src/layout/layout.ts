@@ -8,12 +8,7 @@ export interface NodeBox {
   generation: number;
 }
 
-export interface UnionEdge {
-  id: string;
-  partners: string[];
-  children: string[];
-  married?: string;
-  divorced?: string;
+export interface UnionEdge extends Union {
   /** Point the children bus hangs from. */
   x: number;
   y: number;
@@ -170,15 +165,7 @@ export function layoutFamily(graph: FamilyGraph): Layout {
     const points = union.partners.map((p) => nodes.get(p)).filter((n): n is NodeBox => !!n);
     const x = points.length > 0 ? average(points.map((p) => p.x)) : 0;
     const y = points.length > 0 ? Math.max(...points.map((p) => p.y)) : 0;
-    return {
-      id: union.id,
-      partners: union.partners,
-      children: union.children,
-      ...(union.married !== undefined ? { married: union.married } : {}),
-      ...(union.divorced !== undefined ? { divorced: union.divorced } : {}),
-      x,
-      y,
-    };
+    return { ...union, x, y };
   });
 
   return normalise(nodes, unions);

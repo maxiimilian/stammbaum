@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parseFamily } from '../src/parser/parse';
-import { unionId } from '../src/parser/types';
+import { unionEnd, unionId, unionStart, unionStatus, type Union } from '../src/parser/types';
 
 const sample = readFileSync(new URL('../data/family.md', import.meta.url), 'utf8');
 
@@ -47,6 +47,13 @@ describe('parseFamily', () => {
     expect(graph.unions[0]).toMatchObject({ married: '1990', children: ['c', 'd'] });
   });
 
+  it('parses an unmarried partnership', () => {
+    const graph = parseFamily('```family\na + b together=2015 -> c\nd + e together=2008 separated=2014\n```');
+    expect(graph.unions[0]).toMatchObject({ together: '2015', children: ['c'] });
+    expect(graph.unions[1]).toMatchObject({ together: '2008', separated: '2014' });
+    expect(graph.warnings.filter((w) => w.message.startsWith('unknown'))).toEqual([]);
+  });
+
   it('supports a single parent and the children= attribute', () => {
     const graph = parseFamily('```family\nperson a "A"\na children=b, c\n```');
     expect(graph.unions[0]).toMatchObject({ partners: ['a'], children: ['b', 'c'] });
@@ -70,5 +77,43 @@ describe('parseFamily', () => {
 
   it('has no warnings for the shipped sample data', () => {
     expect(parseFamily(sample).warnings).toEqual([]);
+  });
+});
+
+describe('unionStatus', () => {
+  const union = (fields: Partial<Union>): Union => ({ id: 'a+b', partners: ['a', 'b'], children: [], ...fields });
+
+  it('treats a partnership without any date as a marriage', () => {
+    expect(unionStatus(union({}))).toBe('married');
+  });
+
+  it('reads together= as an unmarried couple', () => {
+    expect(unionStatus(union({ together: '2015' }))).toBe('together');
+    expect(unionStatus(union({ together: '?' }))).toBe('together');
+  });
+
+  it('ends a marriage with divorced= and a relationship with separated=', () => {
+    expect(unionStatus(union({ married: '1984', divorced: '1996' }))).toBe('divorced');
+    expect(unionStatus(union({ together: '2008', separated: '2014' }))).toBe('separated');
+  });
+
+  it('stays divorced when a marriage followed the relationship', () => {
+    expect(unionStatus(union({ together: '2005', married: '2008', separated: '2014' }))).toBe('divorced');
+  });
+
+  it('reports start and end whichever keys were used', () => {
+    expect(unionStart(union({ together: '2015' }))).toBe('2015');
+    expect(unionStart(union({ married: '1956' }))).toBe('1956');
+    expect(unionEnd(union({ separated: '2014' }))).toBe('2014');
+    expect(unionEnd(union({}))).toBeUndefined();
+  });
+
+  it('keeps the state but drops the date when there is none to show', () => {
+    for (const value of ['?', 'true', 'True', 'yes', '']) {
+      expect(unionStatus(union({ together: value }))).toBe('together');
+      expect(unionStart(union({ together: value }))).toBeUndefined();
+      expect(unionStatus(union({ divorced: value }))).toBe('divorced');
+      expect(unionEnd(union({ divorced: value }))).toBeUndefined();
+    }
   });
 });

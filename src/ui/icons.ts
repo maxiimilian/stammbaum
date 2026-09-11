@@ -33,6 +33,31 @@ export function icon(name: IconName): SVGSVGElement {
   return svg;
 }
 
+/**
+ * Geometry of the marriage glyph: two rings of `radius`, their centres `offset`
+ * either side of the middle. `clearance` is where the partner line has to stop.
+ */
+export const RINGS = { radius: 8, offset: 5, clearance: 15 };
+
+/**
+ * Two interlocking rings — the ⚭ that marks a marriage. Open, so both outlines
+ * stay visible; the partner line breaks around them rather than crossing them.
+ */
+export function weddingRings(x: number, y: number): SVGGElement {
+  const group = document.createElementNS(SVG_NS, 'g');
+  group.setAttribute('class', 'rings');
+  for (const dx of [-RINGS.offset, RINGS.offset]) {
+    const ring = document.createElementNS(SVG_NS, 'circle');
+    // Not "ring": that is a Tailwind utility, and it would win over ours.
+    ring.setAttribute('class', 'union-ring');
+    ring.setAttribute('cx', String(x + dx));
+    ring.setAttribute('cy', String(y));
+    ring.setAttribute('r', String(RINGS.radius));
+    group.append(ring);
+  }
+  return group;
+}
+
 /** A Material-style icon button with an accessible label. */
 export function iconButton(name: IconName, label: string): HTMLButtonElement {
   const button = document.createElement('button');

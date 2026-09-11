@@ -1,7 +1,15 @@
 import type { Family } from '../family';
-import type { Person, Union } from '../parser/types';
+import {
+  unionEnd,
+  unionStart,
+  unionStatus,
+  type Person,
+  type Union,
+  type UnionStatus,
+} from '../parser/types';
 import { bubble, tile } from '../ui/tile';
 import { longDate, shortName, year } from '../ui/format';
+import { weddingRings, RINGS } from '../ui/icons';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -53,6 +61,8 @@ export function renderPerson(family: Family, person: Person): HTMLElement {
     if (!partner) return;
     const element = document.createElement('div');
     element.className = 'partner';
+    // The connector is drawn later, from the geometry — it reads the state here.
+    element.dataset.status = unionStatus(union);
     element.append(tile(partner), relationPill(union));
     partnerTiles.set(union.id, element);
     (index === 0 && partnerships.length > 1 ? left : right).append(element);
@@ -144,20 +154,27 @@ function line(className: string, text: string): HTMLElement {
   return element;
 }
 
+/** What each of the four partnership states is called and coloured. */
+const RELATION: Record<UnionStatus, { label: string; badge: string; ended: boolean }> = {
+  married: { label: 'verheiratet', badge: 'badge-primary', ended: false },
+  together: { label: 'zusammen', badge: 'badge-secondary', ended: false },
+  divorced: { label: 'geschieden', badge: 'badge-error', ended: true },
+  separated: { label: 'getrennt', badge: 'badge-error', ended: true },
+};
+
 function relationPill(union: Union): HTMLElement {
+  const status = unionStatus(union);
+  const { label, badge, ended } = RELATION[status];
   const pill = document.createElement('span');
-  const divorced = union.divorced !== undefined;
-  pill.className = divorced
-    ? 'relation-pill is-divorced badge badge-sm badge-soft badge-error'
-    : 'relation-pill badge badge-sm badge-soft badge-primary';
-  const from = year(union.married);
-  const to = year(union.divorced);
-  if (divorced) {
-    pill.textContent = [from, to].filter(Boolean).join(' – ') || 'geschieden';
-    pill.title = `geschieden${to ? ` ${to}` : ''}`;
+  pill.className = `relation-pill badge badge-sm badge-soft ${badge}`;
+  const from = year(unionStart(union));
+  const to = year(unionEnd(union));
+  if (ended) {
+    pill.textContent = [from, to].filter(Boolean).join(' – ') || label;
+    pill.title = `${label}${to ? ` ${to}` : ''}`;
   } else {
-    pill.textContent = from ? `seit ${from}` : 'verheiratet';
-    pill.title = `verheiratet${from ? ` seit ${from}` : ''}`;
+    pill.textContent = from ? `seit ${from}` : label;
+    pill.title = `${label}${from ? ` seit ${from}` : ''}`;
   }
   return pill;
 }
@@ -197,6 +214,16 @@ function drawWires(
     element.setAttribute('d', d);
     svg.append(element);
   };
+  /**
+   * Where a married wire has to break to make room for the rings — or nothing,
+   * when the span between the two tiles is too short to hold them.
+   */
+  const ringGap = (from: number, to: number): [number, number] | undefined => {
+    if (Math.abs(to - from) < RINGS.clearance * 2 + 8) return undefined;
+    const middle = (from + to) / 2;
+    const step = Math.sign(to - from) * RINGS.clearance;
+    return [middle - step, middle + step];
+  };
 
   const focusBubble = bubbleOf(focus);
 
@@ -225,20 +252,34 @@ function drawWires(
     const below = bubble.top > card.bottom - 4;
     partnerGeometry.set(unionId, { bubble, outer, below });
 
-    const divorced = element.querySelector('.relation-pill.is-divorced') !== null;
-    const kind = `wire wire-${divorced ? 'divorced' : 'married'}`;
+    const status = element.dataset.status ?? 'married';
+    const kind = `wire wire-${status}`;
     if (below) {
       const midY = (card.bottom + bubble.top) / 2;
-      path(
-        `M ${focusBubble.cx} ${card.bottom} L ${focusBubble.cx} ${midY} L ${bubble.cx} ${midY} L ${bubble.cx} ${bubble.top}`,
-        kind,
-      );
+      const gap = status === 'married' ? ringGap(focusBubble.cx, bubble.cx) : undefined;
+      if (gap) {
+        path(`M ${focusBubble.cx} ${card.bottom} L ${focusBubble.cx} ${midY} L ${gap[0]} ${midY}`, kind);
+        path(`M ${gap[1]} ${midY} L ${bubble.cx} ${midY} L ${bubble.cx} ${bubble.top}`, kind);
+        svg.append(weddingRings((focusBubble.cx + bubble.cx) / 2, midY));
+      } else {
+        path(
+          `M ${focusBubble.cx} ${card.bottom} L ${focusBubble.cx} ${midY} L ${bubble.cx} ${midY} L ${bubble.cx} ${bubble.top}`,
+          kind,
+        );
+      }
       continue;
     }
     const y = (bubble.top + bubble.bottom) / 2;
     const [from, to] =
       bubble.cx < focusBubble.cx ? [bubble.right, card.left] : [card.right, bubble.left];
-    path(`M ${from} ${y} L ${to} ${y}`, kind);
+    const gap = status === 'married' ? ringGap(from, to) : undefined;
+    if (gap) {
+      path(`M ${from} ${y} L ${gap[0]} ${y}`, kind);
+      path(`M ${gap[1]} ${y} L ${to} ${y}`, kind);
+      svg.append(weddingRings((from + to) / 2, y));
+    } else {
+      path(`M ${from} ${y} L ${to} ${y}`, kind);
+    }
   }
 
   for (const { union, tiles } of broods) {
