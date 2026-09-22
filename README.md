@@ -14,6 +14,8 @@ never part of this repository — see [Keeping the family
 private](#keeping-the-family-private); a made-up family in
 [`sample/`](sample/family.md) stands in until it exists.
 
+Built with [Claude Code](https://claude.com/claude-code). 
+
 ## Gestures
 
 The overview has no zoom buttons; it is driven by gestures, the same ones a map
